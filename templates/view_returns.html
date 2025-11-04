@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>View Returns - AOA Library</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='assets/aoa.ico') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="page">
+    <nav class="navbar">
+        <div class="nav-brand">
+            <h1>Returned Books</h1>
+        </div>
+        <div class="nav-actions">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Student</th>
+                        <th>Title</th>
+                        <th>Book ID(s)</th>
+                        <th>Date Taken</th>
+                        <th>Date Returned</th>
+                        <th>Returned By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ret in returns %}
+                    <tr>
+                        <td>{{ ret.student }}</td>
+                        <td>{{ ret.title }}</td>
+                        <td>{{ ret.ids }}</td>
+                        <td>{{ ret.issue }}</td>
+                        <td>{{ ret.returned }}</td>
+                        <td>{{ ret.returned_by if ret.returned_by else '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
+
