@@ -22,6 +22,38 @@
 
     <div class="form-container">
         <h4>Email Configuration Status</h4>
+        
+        <h5 style="margin-top: 20px;">Environment Variables (from Render):</h5>
+        <table class="table" style="margin-bottom: 20px;">
+            <tr>
+                <td><strong>SMTP_SERVER:</strong></td>
+                <td>{{ env_check.SMTP_SERVER }}</td>
+            </tr>
+            <tr>
+                <td><strong>SMTP_PORT:</strong></td>
+                <td>{{ env_check.SMTP_PORT }}</td>
+            </tr>
+            <tr>
+                <td><strong>EMAIL_ADDRESS:</strong></td>
+                <td>{{ env_check.EMAIL_ADDRESS }}</td>
+            </tr>
+            <tr>
+                <td><strong>EMAIL_PASSWORD:</strong></td>
+                <td>
+                    {% if env_check.EMAIL_PASSWORD == 'Set' %}
+                        <span style="color: green;">✓ Set</span>
+                    {% else %}
+                        <span style="color: red;">✗ Not Set</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td><strong>EMAIL_ENABLED:</strong></td>
+                <td>{{ env_check.EMAIL_ENABLED }}</td>
+            </tr>
+        </table>
+        
+        <h5 style="margin-top: 20px;">Loaded Configuration:</h5>
         <table class="table" style="margin-bottom: 30px;">
             <tr>
                 <td><strong>Email Enabled:</strong></td>
@@ -35,13 +67,7 @@
             </tr>
             <tr>
                 <td><strong>Email Address:</strong></td>
-                <td>
-                    {% if config.has_email %}
-                        <span style="color: green;">✓ Set</span>
-                    {% else %}
-                        <span style="color: red;">✗ Not Set</span>
-                    {% endif %}
-                </td>
+                <td>{{ config.email_address }}</td>
             </tr>
             <tr>
                 <td><strong>Email Password:</strong></td>

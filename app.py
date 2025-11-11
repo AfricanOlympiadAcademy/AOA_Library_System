@@ -263,12 +263,18 @@ def send_email_direct(to_email, subject, body):
 def send_email(to_email, subject, body, background=True):
     """Send an email - can be queued for background sending or sent immediately"""
     if background:
+        # Check if worker is running
+        global email_worker_thread
+        if email_worker_thread is None or not email_worker_thread.is_alive():
+            print("WARNING: Email worker thread not running! Starting it now...")
+            start_email_worker()
+        
         email_queue.put({
             'to': to_email,
             'subject': subject,
             'body': body
         })
-        print(f"Email queued for background sending to {to_email}")
+        print(f"Email queued for background sending to {to_email} (queue size now: {email_queue.qsize()})")
         return True
     else:
         return send_email_direct(to_email, subject, body)
@@ -276,6 +282,10 @@ def send_email(to_email, subject, body, background=True):
 def email_worker():
     """Background worker that processes the email queue"""
     print("Email worker thread started")
+    import time
+    last_heartbeat = time.time()
+    heartbeat_interval = 30  # Log heartbeat every 30 seconds
+    
     while True:
         try:
             email_data = email_queue.get(timeout=1)
@@ -291,6 +301,11 @@ def email_worker():
                 print(f"Email worker: Failed to send email to {email_data['to']} - check logs above for details")
             email_queue.task_done()
         except queue.Empty:
+            # Log heartbeat periodically to confirm worker is alive
+            current_time = time.time()
+            if current_time - last_heartbeat >= heartbeat_interval:
+                print(f"Email worker: Alive and waiting for emails (queue size: {email_queue.qsize()})")
+                last_heartbeat = current_time
             continue
         except Exception as e:
             print(f"ERROR in email worker: {type(e).__name__}: {e}")
@@ -309,6 +324,13 @@ def start_email_worker():
         email_worker_thread = threading.Thread(target=email_worker, daemon=True)
         email_worker_thread.start()
         print("Email worker thread initialized")
+        # Verify it's actually running
+        import time
+        time.sleep(0.1)  # Brief pause to let thread start
+        if email_worker_thread.is_alive():
+            print("Email worker thread confirmed running")
+        else:
+            print("WARNING: Email worker thread started but is not alive!")
 
 def check_and_send_due_tomorrow_reminders():
     """Check for books due tomorrow and send reminder emails"""
@@ -1213,7 +1235,7 @@ def test_email():
             flash('Email configuration not found. Check environment variables.', 'error')
             return redirect(url_for('test_email'))
         
-        # Test email
+        # Test email - send synchronously (not queued) for immediate feedback
         subject = 'AOA Library - Test Email'
         body = '''
         <html>
@@ -1225,6 +1247,7 @@ def test_email():
         </html>
         '''
         
+        # Send directly (not queued) so we get immediate feedback
         result = send_email_direct(test_email_address, subject, body)
         if result:
             flash(f'Test email sent successfully to {test_email_address}!', 'success')
@@ -1236,6 +1259,18 @@ def test_email():
     # GET request - show test form
     config = load_email_config()
     config_status = {}
+    env_check = {}
+    
+    # Check environment variables directly
+    import os
+    env_check = {
+        'SMTP_SERVER': os.getenv('SMTP_SERVER', 'Not set'),
+        'SMTP_PORT': os.getenv('SMTP_PORT', 'Not set'),
+        'EMAIL_ADDRESS': os.getenv('EMAIL_ADDRESS', 'Not set'),
+        'EMAIL_PASSWORD': 'Set' if os.getenv('EMAIL_PASSWORD') else 'Not set',
+        'EMAIL_ENABLED': os.getenv('EMAIL_ENABLED', 'Not set'),
+    }
+    
     if config:
         config_status = {
             'enabled': config.get('enabled', False),
@@ -1243,9 +1278,10 @@ def test_email():
             'has_password': bool(config.get('email_password')),
             'smtp_server': config.get('smtp_server', 'Not set'),
             'smtp_port': config.get('smtp_port', 'Not set'),
+            'email_address': config.get('email_address', 'Not set'),
         }
     
-    return render_template('test_email.html', config=config_status)
+    return render_template('test_email.html', config=config_status, env_check=env_check)
 
 # Initialize email worker and reminder system (works with both direct run and gunicorn)
 # This runs when the module is imported, ensuring emails work in production
