@@ -198,6 +198,7 @@ def send_email_direct(to_email, subject, body):
     
     if not config:
         print("ERROR: Email config not found - check environment variables or email_config.json")
+        print("  Make sure EMAIL_PASSWORD is set in Render Dashboard Environment variables")
         return False
     
     if not config.get('enabled', False):
@@ -211,11 +212,15 @@ def send_email_direct(to_email, subject, body):
     
     if not config.get('email_password'):
         print("ERROR: email_password not set in config")
+        print("  ACTION REQUIRED: Set EMAIL_PASSWORD environment variable in Render Dashboard")
         return False
     
     if not config.get('smtp_server'):
         print("ERROR: smtp_server not set in config")
         return False
+    
+    # Log config status (without password)
+    print(f"Email config loaded: server={config.get('smtp_server')}, port={config.get('smtp_port')}, from={config.get('email_address')}, password_set={'Yes' if config.get('email_password') else 'No'}")
     
     to_email = sanitize_email(to_email)
     if not to_email:
@@ -274,16 +279,27 @@ def email_worker():
     while True:
         try:
             email_data = email_queue.get(timeout=1)
-            send_email_direct(
+            print(f"Email worker: Processing email to {email_data['to']}")
+            result = send_email_direct(
                 email_data['to'],
                 email_data['subject'],
                 email_data['body']
             )
+            if result:
+                print(f"Email worker: Successfully sent email to {email_data['to']}")
+            else:
+                print(f"Email worker: Failed to send email to {email_data['to']} - check logs above for details")
             email_queue.task_done()
         except queue.Empty:
             continue
         except Exception as e:
-            print(f"Error in email worker: {e}")
+            print(f"ERROR in email worker: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                email_queue.task_done()
+            except:
+                pass
 
 def start_email_worker():
     """Start the background email worker thread"""
