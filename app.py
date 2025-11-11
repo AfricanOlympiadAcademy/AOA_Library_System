@@ -196,8 +196,25 @@ def send_email_direct(to_email, subject, body):
     """Send an email directly (blocking) - used internally by worker"""
     config = load_email_config()
     
-    if not config or not config.get('enabled', False):
-        print("Email sending is disabled or config not found")
+    if not config:
+        print("ERROR: Email config not found - check environment variables or email_config.json")
+        return False
+    
+    if not config.get('enabled', False):
+        print("Email sending is disabled in config")
+        return False
+    
+    # Check required fields
+    if not config.get('email_address'):
+        print("ERROR: email_address not set in config")
+        return False
+    
+    if not config.get('email_password'):
+        print("ERROR: email_password not set in config")
+        return False
+    
+    if not config.get('smtp_server'):
+        print("ERROR: smtp_server not set in config")
         return False
     
     to_email = sanitize_email(to_email)
@@ -212,16 +229,30 @@ def send_email_direct(to_email, subject, body):
         msg['Subject'] = subject
         msg.attach(MIMEText(body, 'html'))
         
+        # Remove spaces from password (Gmail app passwords sometimes have spaces)
+        email_password = config['email_password'].replace(' ', '')
+        
+        print(f"Attempting to send email to {to_email} via {config['smtp_server']}:{config['smtp_port']}")
         server = smtplib.SMTP(config['smtp_server'], config['smtp_port'])
         server.starttls()
-        server.login(config['email_address'], config['email_password'])
+        server.login(config['email_address'], email_password)
         server.send_message(msg)
         server.quit()
         
-        print(f"Email sent successfully to {to_email}")
+        print(f"✓ Email sent successfully to {to_email}")
         return True
+    except smtplib.SMTPAuthenticationError as e:
+        print(f"ERROR: SMTP Authentication failed - {e}")
+        print("  Check: 1) Email password is correct (use Gmail App Password)")
+        print("         2) EMAIL_PASSWORD environment variable is set in Render")
+        return False
+    except smtplib.SMTPException as e:
+        print(f"ERROR: SMTP error - {e}")
+        return False
     except Exception as e:
-        print(f"Error sending email: {e}")
+        print(f"ERROR sending email: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 def send_email(to_email, subject, body, background=True):
@@ -1150,6 +1181,55 @@ def get_titles():
                "WHERE i.stdid=? ORDER BY b.title", (student_id,))
     titles = [row['title'] for row in cur.fetchall()]
     return jsonify(titles)
+
+@app.route('/admin/test-email', methods=['GET', 'POST'])
+@login_required
+def test_email():
+    """Test email configuration"""
+    if request.method == 'POST':
+        test_email_address = request.form.get('test_email', '').strip()
+        if not test_email_address:
+            flash('Please provide a test email address', 'error')
+            return redirect(url_for('test_email'))
+        
+        config = load_email_config()
+        if not config:
+            flash('Email configuration not found. Check environment variables.', 'error')
+            return redirect(url_for('test_email'))
+        
+        # Test email
+        subject = 'AOA Library - Test Email'
+        body = '''
+        <html>
+        <body style="font-family: Arial, sans-serif;">
+            <h2>Test Email from AOA Library System</h2>
+            <p>If you received this email, your email configuration is working correctly!</p>
+            <p>Time: ''' + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + '''</p>
+        </body>
+        </html>
+        '''
+        
+        result = send_email_direct(test_email_address, subject, body)
+        if result:
+            flash(f'Test email sent successfully to {test_email_address}!', 'success')
+        else:
+            flash('Failed to send test email. Check Render logs for details.', 'error')
+        
+        return redirect(url_for('test_email'))
+    
+    # GET request - show test form
+    config = load_email_config()
+    config_status = {}
+    if config:
+        config_status = {
+            'enabled': config.get('enabled', False),
+            'has_email': bool(config.get('email_address')),
+            'has_password': bool(config.get('email_password')),
+            'smtp_server': config.get('smtp_server', 'Not set'),
+            'smtp_port': config.get('smtp_port', 'Not set'),
+        }
+    
+    return render_template('test_email.html', config=config_status)
 
 # Initialize email worker and reminder system (works with both direct run and gunicorn)
 # This runs when the module is imported, ensuring emails work in production

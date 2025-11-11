@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+
+{% block title %}Test Email - AOA Library{% endblock %}
+
+{% block page_header %}
+<div class="page-header d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Test Email Configuration</h3>
+</div>
+{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    <span>{{ message }}</span>
+                    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="form-container">
+        <h4>Email Configuration Status</h4>
+        <table class="table" style="margin-bottom: 30px;">
+            <tr>
+                <td><strong>Email Enabled:</strong></td>
+                <td>
+                    {% if config.enabled %}
+                        <span style="color: green;">✓ Yes</span>
+                    {% else %}
+                        <span style="color: red;">✗ No</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Email Address:</strong></td>
+                <td>
+                    {% if config.has_email %}
+                        <span style="color: green;">✓ Set</span>
+                    {% else %}
+                        <span style="color: red;">✗ Not Set</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Email Password:</strong></td>
+                <td>
+                    {% if config.has_password %}
+                        <span style="color: green;">✓ Set</span>
+                    {% else %}
+                        <span style="color: red;">✗ Not Set</span>
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td><strong>SMTP Server:</strong></td>
+                <td>{{ config.smtp_server }}</td>
+            </tr>
+            <tr>
+                <td><strong>SMTP Port:</strong></td>
+                <td>{{ config.smtp_port }}</td>
+            </tr>
+        </table>
+
+        {% if not config.has_password %}
+        <div class="alert alert-error" style="background-color: #f8d7da; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+            <strong>⚠️ Email Password Not Set!</strong><br>
+            You need to set the <code>EMAIL_PASSWORD</code> environment variable in Render Dashboard.
+            <ol style="margin-top: 10px; padding-left: 20px;">
+                <li>Go to <a href="https://dashboard.render.com" target="_blank">Render Dashboard</a></li>
+                <li>Select your service: <strong>aoa-library-system</strong></li>
+                <li>Go to <strong>Environment</strong> tab</li>
+                <li>Add: <code>EMAIL_PASSWORD</code> = <code>your-gmail-app-password</code></li>
+                <li>Save and redeploy</li>
+            </ol>
+        </div>
+        {% endif %}
+
+        <h4>Send Test Email</h4>
+        <form method="POST" action="{{ url_for('test_email') }}">
+            <div class="form-group">
+                <label for="test_email">Test Email Address</label>
+                <input type="email" id="test_email" name="test_email" required class="form-control" placeholder="your-email@example.com">
+                <small class="form-text">Enter an email address to send a test email to</small>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Send Test Email</button>
+        </form>
+
+        <div style="margin-top: 30px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+            <h5>How to Set Environment Variables in Render:</h5>
+            <ol>
+                <li>Go to <a href="https://dashboard.render.com" target="_blank">https://dashboard.render.com</a></li>
+                <li>Click on your service: <strong>aoa-library-system</strong></li>
+                <li>Click <strong>Environment</strong> in the left sidebar</li>
+                <li>Click <strong>"Add Environment Variable"</strong></li>
+                <li>Add these variables:
+                    <ul>
+                        <li><code>EMAIL_ENABLED</code> = <code>true</code></li>
+                        <li><code>SMTP_SERVER</code> = <code>smtp.gmail.com</code></li>
+                        <li><code>SMTP_PORT</code> = <code>587</code></li>
+                        <li><code>EMAIL_ADDRESS</code> = <code>tech@africanolympiadfoundation.org</code></li>
+                        <li><code>EMAIL_PASSWORD</code> = <code>your-gmail-app-password</code> (IMPORTANT!)</li>
+                        <li><code>LIBRARY_NAME</code> = <code>AOA Library</code></li>
+                    </ul>
+                </li>
+                <li>Click <strong>"Save Changes"</strong> - Render will auto-redeploy</li>
+            </ol>
+            
+            <h5 style="margin-top: 20px;">Gmail App Password:</h5>
+            <p>If using Gmail, you need an <strong>App Password</strong>, not your regular password:</p>
+            <ol>
+                <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank">Google App Passwords</a></li>
+                <li>Enable 2-Step Verification if not already enabled</li>
+                <li>Generate a new app password for "Mail"</li>
+                <li>Copy the 16-character password (remove spaces)</li>
+                <li>Use it as <code>EMAIL_PASSWORD</code> in Render</li>
+            </ol>
+        </div>
+    </div>
+{% endblock %}
+
