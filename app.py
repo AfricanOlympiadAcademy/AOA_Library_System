@@ -155,7 +155,19 @@ def populate_initial_students():
         db.commit()
 
 def load_email_config():
-    """Load email configuration from email_config.json"""
+    """Load email configuration from environment variables (production) or email_config.json (development)"""
+    # Try environment variables first (more secure for production)
+    if os.getenv('SMTP_SERVER'):
+        return {
+            'enabled': os.getenv('EMAIL_ENABLED', 'true').lower() == 'true',
+            'smtp_server': os.getenv('SMTP_SERVER'),
+            'smtp_port': int(os.getenv('SMTP_PORT', '587')),
+            'email_address': os.getenv('EMAIL_ADDRESS'),
+            'email_password': os.getenv('EMAIL_PASSWORD'),
+            'library_name': os.getenv('LIBRARY_NAME', 'AOA Library')
+        }
+    
+    # Fallback to config file (for local development)
     try:
         config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'email_config.json')
         with open(config_path, 'r') as f:
@@ -1139,11 +1151,18 @@ def get_titles():
     titles = [row['title'] for row in cur.fetchall()]
     return jsonify(titles)
 
-if __name__ == '__main__':
+# Initialize email worker and reminder system (works with both direct run and gunicorn)
+# This runs when the module is imported, ensuring emails work in production
+try:
     with app.app_context():
         get_db()
         populate_initial_students()
-    start_email_worker()
-    start_reminder_system()
+        start_email_worker()
+        start_reminder_system()
+        print("App initialized: Email worker and reminder system started")
+except Exception as e:
+    print(f"Warning: Could not initialize app components: {e}")
+
+if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
 
