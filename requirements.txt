@@ -2,5 +2,6 @@ flask>=2.3.0
 pytz>=2023.3
 schedule>=1.2.0
 pillow>=10.0.0
+gunicorn>=21.2.0
 
 
