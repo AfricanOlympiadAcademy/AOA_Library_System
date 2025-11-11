@@ -1,99 +1,94 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View Students - AOA Library</title>
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='assets/aoa.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body class="page">
-    <nav class="navbar">
-        <div class="nav-brand">
-            <h1>View Students</h1>
-        </div>
-        <div class="nav-actions">
-            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
-        </div>
-    </nav>
-    
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">
-                        <span>{{ message }}</span>
-                        <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
-        <div class="actions-panel">
-            <form id="deleteForm" style="display: none;">
-                <input type="hidden" id="deleteUserId" name="userid">
-                <div class="form-group-inline">
-                    <label>Admin Password:</label>
-                    <input type="password" id="deletePassword" name="password" required>
+{% extends 'base.html' %}
+
+{% block title %}View Students - AOA Library{% endblock %}
+{% block page_header %}
+<div class="page-header d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">View Students</h3>
+</div>
+{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    <span>{{ message }}</span>
+                    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
                 </div>
-                <button type="submit" class="btn btn-danger">Confirm Delete</button>
-                <button type="button" onclick="cancelDelete()" class="btn btn-secondary">Cancel</button>
-            </form>
-        </div>
-        
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>User ID</th>
-                        <th>Email</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for student in students %}
-                    <tr>
-                        <td>{{ student.name }}</td>
-                        <td>{{ student.userid }}</td>
-                        <td>{{ student.email }}</td>
-                        <td>
-                            <button onclick="deleteStudent('{{ student.userid }}', '{{ student.name }}')" 
-                                    class="btn btn-danger btn-sm">Delete</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="actions-panel" style="display: none;">
+        <form id="deleteForm" style="display: none;">
+            <input type="hidden" id="deleteUserId" name="userid">
+            <div class="form-group mb-2">
+                <label>Admin Password:</label>
+                <input type="password" id="deletePassword" name="password" required class="form-control">
+            </div>
+            <button type="submit" class="btn btn-danger">Confirm Delete</button>
+            <button type="button" onclick="cancelDelete()" class="btn btn-secondary">Cancel</button>
+        </form>
     </div>
+
+    <div class="table-container">
+        <table class="data-table table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>User ID</th>
+                    <th>Email</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for student in students %}
+                <tr>
+                    <td>{{ student.name }}</td>
+                    <td>{{ student.userid }}</td>
+                    <td>{{ student.email }}</td>
+                    <td>
+                        <button onclick="deleteStudent('{{ student.userid }}', '{{ student.name }}')" 
+                                class="btn btn-danger btn-sm">Delete</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    function deleteStudent(userid, name) {
+        if (confirm(`Are you sure you want to delete "${name}"?`)) {
+            document.getElementById('deleteUserId').value = userid;
+            document.getElementById('deleteForm').style.display = 'block';
+            document.querySelector('.actions-panel').style.display = 'block';
+        }
+    }
     
-    <script>
-        function deleteStudent(userid, name) {
-            if (confirm(`Are you sure you want to delete "${name}"?`)) {
-                document.getElementById('deleteUserId').value = userid;
-                document.getElementById('deleteForm').style.display = 'block';
-            }
-        }
+    function cancelDelete() {
+        document.getElementById('deleteForm').style.display = 'none';
+        document.getElementById('deletePassword').value = '';
+        document.querySelector('.actions-panel').style.display = 'none';
+    }
+    
+    document.getElementById('deleteForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const userid = document.getElementById('deleteUserId').value;
+        const formData = new FormData();
+        formData.append('password', document.getElementById('deletePassword').value);
         
-        function cancelDelete() {
-            document.getElementById('deleteForm').style.display = 'none';
-            document.getElementById('deletePassword').value = '';
-        }
-        
-        document.getElementById('deleteForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const userid = document.getElementById('deleteUserId').value;
-            const formData = new FormData();
-            formData.append('password', document.getElementById('deletePassword').value);
-            
-            fetch(`/students/delete/${userid}`, {
-                method: 'POST',
-                body: formData
-            }).then(() => window.location.reload());
+        fetch(`/students/delete/${userid}`, {
+            method: 'POST',
+            body: formData
+        }).then(() => {
+            document.querySelector('.actions-panel').style.display = 'none';
+            window.location.reload();
         });
-    </script>
-    <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
-</body>
-</html>
+    });
+</script>
+<script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+{% endblock %}
 

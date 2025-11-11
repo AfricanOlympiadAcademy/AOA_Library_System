@@ -1,69 +1,52 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Library Dashboard - AOA Library</title>
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='assets/aoa.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body class="dashboard-page">
-    <nav class="navbar">
-        <div class="nav-brand">
-            <h1>Library Dashboard</h1>
-        </div>
-        <div class="nav-actions">
-            <a href="{{ url_for('logout') }}" class="btn btn-danger">Logout</a>
-        </div>
-    </nav>
-    
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">
-                        <span>{{ message }}</span>
-                        <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
-        <div class="dashboard-grid">
-            <!-- Books Section -->
-            <div class="dashboard-section">
-                <h2>BOOKS</h2>
-                <div class="section-buttons">
-                    <a href="{{ url_for('add_book') }}" class="btn btn-success btn-block">Add Book</a>
-                    <a href="{{ url_for('view_titles') }}" class="btn btn-success btn-block">View Titles</a>
-                    <a href="{{ url_for('view_books') }}" class="btn btn-success btn-block">View Books</a>
-                    <a href="{{ url_for('view_deleted_books') }}" class="btn btn-success btn-block">View Deleted Books</a>
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - AOA Library{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    <span>{{ message }}</span>
+                    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
                 </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="dashboard-grid mt-3">
+        <div class="dashboard-section">
+            <h2>BOOKS</h2>
+            <div class="section-buttons">
+                <a href="{{ url_for('add_book') }}" class="btn btn-success btn-block">Add Book</a>
+                <a href="{{ url_for('view_titles') }}" class="btn btn-success btn-block">View Titles</a>
+                <a href="{{ url_for('view_books') }}" class="btn btn-success btn-block">View Books</a>
+                <a href="{{ url_for('view_deleted_books') }}" class="btn btn-success btn-block">View Deleted Books</a>
             </div>
-            
-            <!-- Students Section -->
-            <div class="dashboard-section">
-                <h2>STUDENTS</h2>
-                <div class="section-buttons">
-                    <a href="{{ url_for('add_student') }}" class="btn btn-warning btn-block">Add Student</a>
-                    <a href="{{ url_for('view_students') }}" class="btn btn-warning btn-block">View Students</a>
-                    <a href="{{ url_for('view_deleted_students') }}" class="btn btn-warning btn-block">View Deleted Students</a>
-                </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>STUDENTS</h2>
+            <div class="section-buttons">
+                <a href="{{ url_for('add_student') }}" class="btn btn-warning btn-block">Add Student</a>
+                <a href="{{ url_for('view_students') }}" class="btn btn-warning btn-block">View Students</a>
+                <a href="{{ url_for('view_deleted_students') }}" class="btn btn-warning btn-block">View Deleted Students</a>
             </div>
-            
-            <!-- Operations Section -->
-            <div class="dashboard-section">
-                <h2>OPERATIONS</h2>
-                <div class="section-buttons">
-                    <a href="{{ url_for('assign_book') }}" class="btn btn-brown btn-block">Assign Book</a>
-                    <a href="{{ url_for('return_book') }}" class="btn btn-brown btn-block">Return Book</a>
-                    <a href="{{ url_for('view_assignments') }}" class="btn btn-brown btn-block">View Assignments</a>
-                    <a href="{{ url_for('view_returns') }}" class="btn btn-brown btn-block">View Returns</a>
-                </div>
+        </div>
+
+        <div class="dashboard-section">
+            <h2>OPERATIONS</h2>
+            <div class="section-buttons">
+                <a href="{{ url_for('assign_book') }}" class="btn btn-brown btn-block">Assign Book</a>
+                <a href="{{ url_for('return_book') }}" class="btn btn-brown btn-block">Return Book</a>
+                <a href="{{ url_for('view_assignments') }}" class="btn btn-brown btn-block">View Assignments</a>
+                <a href="{{ url_for('view_returns') }}" class="btn btn-brown btn-block">View Returns</a>
             </div>
         </div>
     </div>
-    <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
-</body>
-</html>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+{% endblock %}
 

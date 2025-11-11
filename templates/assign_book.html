@@ -1,202 +1,310 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Assign Book - AOA Library</title>
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='assets/aoa.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body class="page">
-    <nav class="navbar">
-        <div class="nav-brand">
-            <h1>Assign Book</h1>
-        </div>
-        <div class="nav-actions">
-            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
-        </div>
-    </nav>
-    
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">
-                        <span>{{ message }}</span>
-                        <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
-        <div class="form-container">
-            <form method="POST" action="{{ url_for('assign_book') }}">
+{% extends 'base.html' %}
+
+{% block title %}Assign Book - AOA Library{% endblock %}
+
+{% block page_header %}
+<div class="page-header d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Assign Book</h3>
+</div>
+{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    <span>{{ message }}</span>
+                    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="form-container">
+        <form method="POST" action="{{ url_for('assign_book') }}">
+            <div class="form-row">
                 <div class="form-group">
                     <label for="student">STUDENT</label>
-                    <select id="student" name="student_id" required>
-                        <option value="">Select Student</option>
-                        {% for student in students %}
-                        <option value="{{ student.userid }}">{{ student.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label for="title">TITLE</label>
-                    <select id="title" name="title" required>
-                        <option value="">Select Title</option>
-                        {% for book in books %}
-                        <option value="{{ book }}">{{ book }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <div class="form-group">
-                    <label>BOOK IDs</label>
-                    <div class="book-ids-selector">
-                        <div id="selectedBooks" class="selected-books"></div>
-                        <button type="button" onclick="openBookSelector()" class="btn btn-secondary">Select Book IDs</button>
+                    <div class="searchable-select">
+                        <input type="text" id="studentSearch" placeholder="Type to search student..." class="form-control" onkeyup="filterStudents()" onfocus="showStudentDropdown()" autocomplete="off">
+                        <input type="hidden" id="student" name="student_id" required>
+                        <div id="studentDropdown" class="searchable-dropdown" style="display: none;">
+                            <div class="dropdown-option" data-value="" onclick="selectStudent('', 'Select Student')">Select Student</div>
+                            {% for student in students %}
+                            <div class="dropdown-option" data-value="{{ student.userid }}" data-name="{{ student.name|lower }}" onclick="selectStudent('{{ student.userid }}', '{{ student.name }}')">{{ student.name }}</div>
+                            {% endfor %}
+                        </div>
                     </div>
                 </div>
-                
+
+                <div class="form-group">
+                    <label for="title">TITLE</label>
+                    <div class="searchable-select">
+                        <input type="text" id="titleSearch" placeholder="Type to search book title..." class="form-control" onkeyup="filterTitles()" onfocus="showTitleDropdown()" autocomplete="off">
+                        <input type="hidden" id="title" name="title" required>
+                        <div id="titleDropdown" class="searchable-dropdown" style="display: none;">
+                            <div class="dropdown-option" data-value="" onclick="selectTitle('', 'Select Title')">Select Title</div>
+                            {% for book in books %}
+                            <div class="dropdown-option" data-value="{{ book }}" data-name="{{ book|lower }}" onclick="selectTitle('{{ book }}', '{{ book }}')">{{ book }}</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>BOOK IDs</label>
+                <div class="book-ids-selector">
+                    <div id="selectedBooks" class="selected-books"></div>
+                    <button type="button" onclick="openBookSelector()" class="btn btn-secondary">Select Book IDs</button>
+                </div>
+            </div>
+
+            <div class="form-row">
                 <div class="form-group">
                     <label for="assigned_date">ASSIGNED DATE</label>
-                    <input type="text" id="assigned_date" value="{{ current_date }}" readonly class="readonly-field">
+                    <input type="text" id="assigned_date" value="{{ current_date }}" readonly class="readonly-field form-control">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="return_date">DATE OF RETURN</label>
-                    <input type="date" id="return_date" name="return_date" required>
+                    <input type="date" id="return_date" name="return_date" required class="form-control">
                 </div>
-                
-                <div class="form-group">
-                    <label for="assigned_by">ASSIGNED BY</label>
-                    <select id="assigned_by" name="assigned_by" required>
-                        <option value="">Select Staff</option>
-                        {% for staff in staff_members %}
-                        <option value="{{ staff }}">{{ staff }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                
-                <input type="hidden" id="book_ids" name="book_ids">
-                <button type="submit" class="btn btn-success btn-block">ASSIGN</button>
-            </form>
-        </div>
+            </div>
+
+            <div class="form-group">
+                <label for="assigned_by">ASSIGNED BY</label>
+                <select id="assigned_by" name="assigned_by" required class="form-select">
+                    <option value="">Select Staff</option>
+                    {% for staff in staff_members %}
+                    <option value="{{ staff }}">{{ staff }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <input type="hidden" id="book_ids" name="book_ids">
+            <button type="submit" class="btn btn-success btn-block">ASSIGN</button>
+        </form>
     </div>
-    
+
     <!-- Book Selector Modal -->
     <div id="bookModal" class="modal" style="display: none;">
         <div class="modal-content">
             <span class="close" onclick="closeBookSelector()">&times;</span>
             <h2>Select Book IDs</h2>
-            <input type="text" id="bookSearch" placeholder="Search books..." class="search-input">
+            <input type="text" id="bookSearch" placeholder="Search books..." class="search-input form-control mb-2">
             <div id="bookList" class="modal-list"></div>
-            <div class="modal-actions">
+            <div class="modal-actions mt-2">
                 <button onclick="confirmSelection()" class="btn btn-primary">Add Selected</button>
                 <button onclick="closeBookSelector()" class="btn btn-secondary">Close</button>
             </div>
         </div>
     </div>
-    
-    <script>
-        let selectedBooks = [];
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let selectedBooks = [];
+
+    // Search functionality for students
+    function filterStudents() {
+        const searchInput = document.getElementById('studentSearch');
+        const searchTerm = searchInput.value.toLowerCase();
+        const dropdown = document.getElementById('studentDropdown');
+        const options = dropdown.querySelectorAll('.dropdown-option');
         
-        function openBookSelector() {
-            const title = document.getElementById('title').value;
-            if (!title) {
-                alert('Please select a title first');
+        options.forEach(option => {
+            const value = option.getAttribute('data-value');
+            if (value === '') {
+                option.style.display = searchTerm === '' ? 'block' : 'none';
                 return;
             }
-            
-            fetch(`/api/get_available_books?title=${encodeURIComponent(title)}`)
-                .then(res => res.json())
-                .then(books => {
-                    const list = document.getElementById('bookList');
-                    list.innerHTML = '';
-                    books.forEach(book => {
-                        const div = document.createElement('div');
-                        div.className = 'book-item';
-                        div.innerHTML = `
-                            <label>
-                                <input type="checkbox" value="${book}" onchange="toggleBook('${book}')">
-                                ${book}
-                            </label>
-                        `;
-                        list.appendChild(div);
-                    });
-                    document.getElementById('bookModal').style.display = 'block';
-                });
-        }
-        
-        function closeBookSelector() {
-            document.getElementById('bookModal').style.display = 'none';
-        }
-        
-        function toggleBook(bookId) {
-            const checkbox = document.querySelector(`input[value="${bookId}"]`);
-            if (checkbox.checked) {
-                if (!selectedBooks.includes(bookId)) {
-                    selectedBooks.push(bookId);
-                }
+            const name = option.getAttribute('data-name') || '';
+            if (name.includes(searchTerm)) {
+                option.style.display = 'block';
             } else {
-                selectedBooks = selectedBooks.filter(id => id !== bookId);
+                option.style.display = 'none';
             }
-            updateSelectedDisplay();
+        });
+        showStudentDropdown();
+    }
+
+    function showStudentDropdown() {
+        document.getElementById('studentDropdown').style.display = 'block';
+    }
+
+    function selectStudent(value, name) {
+        document.getElementById('student').value = value;
+        document.getElementById('studentSearch').value = value ? name : '';
+        document.getElementById('studentDropdown').style.display = 'none';
+    }
+
+    // Clear selection when search is cleared
+    document.getElementById('studentSearch').addEventListener('input', function() {
+        if (this.value === '') {
+            document.getElementById('student').value = '';
         }
+    });
+
+    // Search functionality for book titles
+    function filterTitles() {
+        const searchInput = document.getElementById('titleSearch');
+        const searchTerm = searchInput.value.toLowerCase();
+        const dropdown = document.getElementById('titleDropdown');
+        const options = dropdown.querySelectorAll('.dropdown-option');
         
-        function confirmSelection() {
-            updateSelectedDisplay();
-            closeBookSelector();
-        }
-        
-        function updateSelectedDisplay() {
-            const display = document.getElementById('selectedBooks');
-            document.getElementById('book_ids').value = JSON.stringify(selectedBooks);
-            
-            if (selectedBooks.length === 0) {
-                display.innerHTML = '<span class="text-muted">No books selected</span>';
+        options.forEach(option => {
+            const value = option.getAttribute('data-value');
+            if (value === '') {
+                option.style.display = searchTerm === '' ? 'block' : 'none';
                 return;
             }
-            
-            display.innerHTML = '';
-            const showBooks = selectedBooks.slice(0, 3);
-            showBooks.forEach(book => {
-                const badge = document.createElement('span');
-                badge.className = 'book-badge';
-                badge.innerHTML = `${book} <span onclick="removeBook('${book}')">×</span>`;
-                display.appendChild(badge);
-            });
-            
-            if (selectedBooks.length > 3) {
-                const more = document.createElement('span');
-                more.className = 'text-muted';
-                more.textContent = ` (+${selectedBooks.length - 3} more)`;
-                display.appendChild(more);
+            const name = option.getAttribute('data-name') || '';
+            if (name.includes(searchTerm)) {
+                option.style.display = 'block';
+            } else {
+                option.style.display = 'none';
             }
-        }
-        
-        function removeBook(bookId) {
-            selectedBooks = selectedBooks.filter(id => id !== bookId);
+        });
+        showTitleDropdown();
+    }
+
+    function showTitleDropdown() {
+        document.getElementById('titleDropdown').style.display = 'block';
+    }
+
+    function selectTitle(value, name) {
+        document.getElementById('title').value = value;
+        document.getElementById('titleSearch').value = value ? name : '';
+        document.getElementById('titleDropdown').style.display = 'none';
+        // Clear selected books when title changes
+        selectedBooks = [];
+        updateSelectedDisplay();
+    }
+
+    // Clear selection when search is cleared
+    document.getElementById('titleSearch').addEventListener('input', function() {
+        if (this.value === '') {
+            document.getElementById('title').value = '';
+            selectedBooks = [];
             updateSelectedDisplay();
         }
+    });
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', function(event) {
+        const studentSearch = document.getElementById('studentSearch');
+        const studentDropdown = document.getElementById('studentDropdown');
+        const titleSearch = document.getElementById('titleSearch');
+        const titleDropdown = document.getElementById('titleDropdown');
         
-        // Set default return date (14 days from now)
-        const returnDate = new Date();
-        returnDate.setDate(returnDate.getDate() + 14);
-        document.getElementById('return_date').value = returnDate.toISOString().split('T')[0];
+        if (studentSearch && studentDropdown && 
+            !studentSearch.parentElement.contains(event.target) && 
+            !studentDropdown.contains(event.target)) {
+            studentDropdown.style.display = 'none';
+        }
         
-        // Search functionality
-        document.getElementById('bookSearch').addEventListener('input', function(e) {
-            const search = e.target.value.toLowerCase();
-            const items = document.querySelectorAll('.book-item');
-            items.forEach(item => {
-                const text = item.textContent.toLowerCase();
-                item.style.display = text.includes(search) ? 'block' : 'none';
+        if (titleSearch && titleDropdown && 
+            !titleSearch.parentElement.contains(event.target) && 
+            !titleDropdown.contains(event.target)) {
+            titleDropdown.style.display = 'none';
+        }
+    });
+
+    function openBookSelector() {
+        const title = document.getElementById('title').value;
+        if (!title) {
+            alert('Please select a title first');
+            return;
+        }
+
+        fetch(`/api/get_available_books?title=${encodeURIComponent(title)}`)
+            .then(res => res.json())
+            .then(books => {
+                const list = document.getElementById('bookList');
+                list.innerHTML = '';
+                books.forEach(book => {
+                    const div = document.createElement('div');
+                    div.className = 'book-item';
+                    div.innerHTML = `
+                        <label>
+                            <input type="checkbox" value="${book}" onchange="toggleBook('${book}')">
+                            ${book}
+                        </label>
+                    `;
+                    list.appendChild(div);
+                });
+                document.getElementById('bookModal').style.display = 'block';
             });
+    }
+
+    function closeBookSelector() {
+        document.getElementById('bookModal').style.display = 'none';
+    }
+
+    function toggleBook(bookId) {
+        const checkbox = document.querySelector(`input[value="${bookId}"]`);
+        if (checkbox.checked) {
+            if (!selectedBooks.includes(bookId)) {
+                selectedBooks.push(bookId);
+            }
+        } else {
+            selectedBooks = selectedBooks.filter(id => id !== bookId);
+        }
+        updateSelectedDisplay();
+    }
+
+    function confirmSelection() {
+        updateSelectedDisplay();
+        closeBookSelector();
+    }
+
+    function updateSelectedDisplay() {
+        const display = document.getElementById('selectedBooks');
+        document.getElementById('book_ids').value = JSON.stringify(selectedBooks);
+
+        if (selectedBooks.length === 0) {
+            display.innerHTML = '<span class="text-muted">No books selected</span>';
+            return;
+        }
+
+        display.innerHTML = '';
+        const showBooks = selectedBooks.slice(0, 3);
+        showBooks.forEach(book => {
+            const badge = document.createElement('span');
+            badge.className = 'book-badge';
+            badge.innerHTML = `${book} <span onclick="removeBook('${book}')">×</span>`;
+            display.appendChild(badge);
         });
-    </script>
-    <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
-</body>
-</html>
+
+        if (selectedBooks.length > 3) {
+            const more = document.createElement('span');
+            more.className = 'text-muted';
+            more.textContent = ` (+${selectedBooks.length - 3} more)`;
+            display.appendChild(more);
+        }
+    }
+
+    function removeBook(bookId) {
+        selectedBooks = selectedBooks.filter(id => id !== bookId);
+        updateSelectedDisplay();
+    }
+
+    // Set default return date (14 days from now)
+    const returnDate = new Date();
+    returnDate.setDate(returnDate.getDate() + 14);
+    document.getElementById('return_date').value = returnDate.toISOString().split('T')[0];
+
+    // Search functionality
+    document.getElementById('bookSearch').addEventListener('input', function(e) {
+        const search = e.target.value.toLowerCase();
+        const items = document.querySelectorAll('.book-item');
+        items.forEach(item => {
+            const text = item.textContent.toLowerCase();
+            item.style.display = text.includes(search) ? 'block' : 'none';
+        });
+    });
+</script>
+<script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+{% endblock %}
 

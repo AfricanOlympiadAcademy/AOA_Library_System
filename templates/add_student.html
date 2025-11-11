@@ -1,56 +1,50 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Student - AOA Library</title>
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='assets/aoa.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body class="page">
-    <nav class="navbar">
-        <div class="nav-brand">
-            <h1>Add Student</h1>
-        </div>
-        <div class="nav-actions">
-            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
-        </div>
-    </nav>
-    
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">
-                        <span>{{ message }}</span>
-                        <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
-        <div class="form-container">
-            <form method="POST" action="{{ url_for('add_student') }}">
+{% extends 'base.html' %}
+
+{% block title %}Add Student - AOA Library{% endblock %}
+
+{% block page_header %}
+<div class="page-header d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Add Student</h3>
+</div>
+{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    <span>{{ message }}</span>
+                    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="form-container">
+        <form method="POST" action="{{ url_for('add_student') }}">
+            <div class="form-row">
                 <div class="form-group">
                     <label for="first_name">FIRST NAME</label>
-                    <input type="text" id="first_name" name="first_name" required>
+                    <input type="text" id="first_name" name="first_name" required class="form-control">
                 </div>
-                
+
                 <div class="form-group">
                     <label for="second_name">SECOND NAME</label>
-                    <input type="text" id="second_name" name="second_name">
+                    <input type="text" id="second_name" name="second_name" class="form-control">
                 </div>
-                
-                <div class="form-group">
-                    <label for="email">EMAIL</label>
-                    <input type="email" id="email" name="email" required>
-                </div>
-                
-                <button type="submit" class="btn btn-warning btn-block">ADD STUDENT</button>
-            </form>
-        </div>
+            </div>
+
+            <div class="form-group">
+                <label for="email">EMAIL</label>
+                <input type="email" id="email" name="email" required class="form-control">
+            </div>
+
+            <button type="submit" class="btn btn-warning btn-block">ADD STUDENT</button>
+        </form>
     </div>
-    <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
-</body>
-</html>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+{% endblock %}
 

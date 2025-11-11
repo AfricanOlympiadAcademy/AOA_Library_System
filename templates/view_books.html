@@ -1,218 +1,226 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>View Books - AOA Library</title>
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='assets/aoa.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body class="page">
-    <nav class="navbar">
-        <div class="nav-brand">
-            <h1>View Books</h1>
-        </div>
-        <div class="nav-actions">
-            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
-        </div>
-    </nav>
-    
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">
-                        <span>{{ message }}</span>
-                        <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
-        <div class="actions-panel">
-            <form id="editForm" style="display: none;">
-                <input type="hidden" id="editBookId" name="book_id">
-                <div class="form-group-inline">
-                    <label>Admin Password:</label>
-                    <input type="password" id="editPassword" name="password" required>
+{% extends 'base.html' %}
+
+{% block title %}View Books - AOA Library{% endblock %}
+
+{% block page_header %}
+<div class="page-header d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">View Books</h3>
+</div>
+{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    <span>{{ message }}</span>
+                    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
                 </div>
-                <div class="form-group-inline">
-                    <label>Book ID:</label>
-                    <input type="text" id="editNewId" name="new_id" placeholder="Leave empty to keep current">
-                </div>
-                <div class="form-group-inline">
-                    <label>Category:</label>
-                    <select id="editNewSubject" name="new_subject">
-                        <option value="">Select Category (leave empty to keep current)</option>
-                        <option value="African Fiction">African Fiction</option>
-                        <option value="Other Fiction">Other Fiction</option>
-                        <option value="Non-fiction">Non-fiction</option>
-                        <option value="art and culture">art and culture</option>
-                        <option value="Math and science">Math and science</option>
-                        <option value="popular fun/games">popular fun/games</option>
-                        <option value="Olympiad">Olympiad</option>
-                    </select>
-                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="actions-panel mb-3" style="display: none;">
+        <form id="editForm" style="display: none;">
+            <input type="hidden" id="editBookId" name="book_id">
+            <div class="form-group mb-2">
+                <label class="form-label">Admin Password:</label>
+                <input type="password" id="editPassword" name="password" class="form-control" required>
+            </div>
+            <div class="form-group mb-2">
+                <label class="form-label">Book ID:</label>
+                <input type="text" id="editNewId" name="new_id" class="form-control" placeholder="Leave empty to keep current">
+            </div>
+            <div class="form-group mb-2">
+                <label class="form-label">Category:</label>
+                <select id="editNewSubject" name="new_subject" class="form-select">
+                    <option value="">Select Category (leave empty to keep current)</option>
+                    <option value="Unclassified">Unclassified</option>
+                    <option value="African Fiction">African Fiction</option>
+                    <option value="Other Fiction">Other Fiction</option>
+                    <option value="Non-fiction">Non-fiction</option>
+                    <option value="art and culture">art and culture</option>
+                    <option value="Math and science">Math and science</option>
+                    <option value="popular fun/games">popular fun/games</option>
+                    <option value="Olympiad">Olympiad</option>
+                </select>
+            </div>
+            <div class="mt-2">
                 <button type="submit" class="btn btn-primary">Save Changes</button>
                 <button type="button" onclick="cancelEdit()" class="btn btn-secondary">Cancel</button>
-            </form>
-            
-            <form id="deleteForm" style="display: none;">
-                <input type="hidden" id="deleteBookId" name="book_id">
-                <div class="form-group-inline">
-                    <label>Admin Password:</label>
-                    <input type="password" id="deletePassword" name="password" required>
-                </div>
+            </div>
+        </form>
+
+        <form id="deleteForm" style="display: none;">
+            <input type="hidden" id="deleteBookId" name="book_id">
+            <div class="form-group mb-2">
+                <label class="form-label">Admin Password:</label>
+                <input type="password" id="deletePassword" name="password" class="form-control" required>
+            </div>
+            <div class="mt-2">
                 <button type="submit" class="btn btn-danger">Confirm Delete</button>
                 <button type="button" onclick="cancelDelete()" class="btn btn-secondary">Cancel</button>
-            </form>
-        </div>
-        
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Title</th>
-                        <th>Category</th>
-                        <th>Author</th>
-                        <th>Book ID</th>
-                        <th>Available</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for book in books %}
-                    <tr>
-                        <td>{{ book.title }}</td>
-                        <td>{{ book.subject }}</td>
-                        <td>{{ book.author }}</td>
-                        <td>{{ book.book_id }}</td>
-                        <td>
-                            <span class="badge badge-{{ 'success' if book.available == 'Yes' else 'danger' }}">
-                                {{ book.available }}
-                            </span>
-                        </td>
-                        <td>
-                            <button class="btn btn-primary btn-sm edit-btn" data-book-id="{{ book.book_id }}" data-book-subject="{{ book.subject|e }}">Edit</button>
-                            <button onclick="deleteBook('{{ book.book_id }}')" class="btn btn-danger btn-sm">Delete</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+            </div>
+        </form>
     </div>
+
+    <div class="table-container">
+        <table class="data-table table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Category</th>
+                    <th>Author</th>
+                    <th>Book ID</th>
+                    <th>Available</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for book in books %}
+                <tr>
+                    <td>{{ book.title }}</td>
+                    <td>{{ book.subject }}</td>
+                    <td>{{ book.author }}</td>
+                    <td>{{ book.book_id }}</td>
+                    <td>
+                        <span class="badge badge-{{ 'success' if book.available == 'Yes' else 'danger' }}">
+                            {{ book.available }}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="btn btn-primary btn-sm edit-btn" data-book-id="{{ book.book_id }}" data-book-subject="{{ book.subject|e }}">Edit</button>
+                        <button onclick="deleteBook('{{ book.book_id }}')" class="btn btn-danger btn-sm">Delete</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let currentBookData = {};
     
-    <script>
-        let currentBookData = {};
-        
-        // Use event delegation for edit buttons
-        document.addEventListener('DOMContentLoaded', function() {
-            document.querySelectorAll('.edit-btn').forEach(button => {
-                button.addEventListener('click', function() {
-                    const bookId = this.getAttribute('data-book-id');
-                    const currentSubject = this.getAttribute('data-book-subject') || '';
-                    editBook(bookId, currentSubject);
-                });
+    // Use event delegation for edit buttons
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.edit-btn').forEach(button => {
+            button.addEventListener('click', function() {
+                const bookId = this.getAttribute('data-book-id');
+                const currentSubject = this.getAttribute('data-book-subject') || '';
+                editBook(bookId, currentSubject);
             });
         });
+    });
+    
+    function editBook(bookId, currentSubject) {
+        currentBookData[bookId] = {
+            bookId: bookId,
+            subject: currentSubject
+        };
         
-        function editBook(bookId, currentSubject) {
-            currentBookData[bookId] = {
-                bookId: bookId,
-                subject: currentSubject
-            };
-            
-            document.getElementById('editBookId').value = bookId;
-            document.getElementById('editNewId').value = '';
-            const subjectSelect = document.getElementById('editNewSubject');
-            subjectSelect.value = currentSubject || '';
-            subjectSelect.setAttribute('data-original', currentSubject || '');
-            document.getElementById('editPassword').value = '';
-            document.getElementById('editForm').style.display = 'block';
-            document.getElementById('deleteForm').style.display = 'none';
+        document.getElementById('editBookId').value = bookId;
+        document.getElementById('editNewId').value = '';
+        const subjectSelect = document.getElementById('editNewSubject');
+        subjectSelect.value = currentSubject || '';
+        subjectSelect.setAttribute('data-original', currentSubject || '');
+        document.getElementById('editPassword').value = '';
+        document.getElementById('editForm').style.display = 'block';
+        document.getElementById('deleteForm').style.display = 'none';
+        document.querySelector('.actions-panel').style.display = 'block';
+    }
+    
+    function cancelEdit() {
+        document.getElementById('editForm').style.display = 'none';
+        document.getElementById('editPassword').value = '';
+        document.getElementById('editNewId').value = '';
+        document.getElementById('editNewSubject').value = '';
+        if (document.getElementById('deleteForm').style.display === 'none') {
+            document.querySelector('.actions-panel').style.display = 'none';
+        }
+    }
+    
+    function deleteBook(bookId) {
+        document.getElementById('deleteBookId').value = bookId;
+        document.getElementById('deleteForm').style.display = 'block';
+        document.getElementById('editForm').style.display = 'none';
+        document.querySelector('.actions-panel').style.display = 'block';
+    }
+    
+    function cancelDelete() {
+        document.getElementById('deleteForm').style.display = 'none';
+        document.getElementById('deletePassword').value = '';
+        if (document.getElementById('editForm').style.display === 'none') {
+            document.querySelector('.actions-panel').style.display = 'none';
+        }
+    }
+    
+    document.getElementById('editForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const bookId = document.getElementById('editBookId').value;
+        const password = document.getElementById('editPassword').value;
+        const newId = document.getElementById('editNewId').value.trim();
+        const subjectSelect = document.getElementById('editNewSubject');
+        const newSubject = subjectSelect.value.trim();
+        
+        if (!password) {
+            alert('Please enter admin password');
+            return;
         }
         
-        function cancelEdit() {
-            document.getElementById('editForm').style.display = 'none';
-            document.getElementById('editPassword').value = '';
-            document.getElementById('editNewId').value = '';
-            document.getElementById('editNewSubject').value = '';
+        // Get original values from the data attribute
+        const originalSubject = subjectSelect.getAttribute('data-original') || '';
+        
+        // Check if at least one field has changed
+        const idChanged = newId && newId !== bookId;
+        const subjectChanged = newSubject && newSubject !== originalSubject;
+        
+        if (!idChanged && !subjectChanged) {
+            alert('Please make at least one change (Book ID or Category)');
+            return;
         }
         
-        function deleteBook(bookId) {
-            document.getElementById('deleteBookId').value = bookId;
-            document.getElementById('deleteForm').style.display = 'block';
-            document.getElementById('editForm').style.display = 'none';
+        const formData = new FormData();
+        formData.append('password', password);
+        if (newId) {
+            formData.append('new_id', newId);
+        }
+        if (newSubject) {
+            formData.append('new_subject', newSubject);
         }
         
-        function cancelDelete() {
-            document.getElementById('deleteForm').style.display = 'none';
-            document.getElementById('deletePassword').value = '';
-        }
-        
-        document.getElementById('editForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const bookId = document.getElementById('editBookId').value;
-            const password = document.getElementById('editPassword').value;
-            const newId = document.getElementById('editNewId').value.trim();
-            const subjectSelect = document.getElementById('editNewSubject');
-            const newSubject = subjectSelect.value.trim();
-            
-            if (!password) {
-                alert('Please enter admin password');
-                return;
-            }
-            
-            // Get original values from the data attribute
-            const originalSubject = subjectSelect.getAttribute('data-original') || '';
-            
-            // Check if at least one field has changed
-            const idChanged = newId && newId !== bookId;
-            const subjectChanged = newSubject && newSubject !== originalSubject;
-            
-            if (!idChanged && !subjectChanged) {
-                alert('Please make at least one change (Book ID or Category)');
-                return;
-            }
-            
-            const formData = new FormData();
-            formData.append('password', password);
-            if (newId) {
-                formData.append('new_id', newId);
-            }
-            if (newSubject) {
-                formData.append('new_subject', newSubject);
-            }
-            
-            fetch(`/books/edit/${bookId}`, {
-                method: 'POST',
-                body: formData
-            }).then(response => {
-                if (response.ok) {
-                    window.location.reload();
-                } else {
-                    alert('Error updating book. Please try again.');
-                }
-            }).catch(error => {
-                console.error('Error:', error);
+        fetch(`/books/edit/${bookId}`, {
+            method: 'POST',
+            body: formData
+        }).then(response => {
+            if (response.ok) {
+                document.querySelector('.actions-panel').style.display = 'none';
+                window.location.reload();
+            } else {
                 alert('Error updating book. Please try again.');
-            });
+            }
+        }).catch(error => {
+            console.error('Error:', error);
+            alert('Error updating book. Please try again.');
         });
+    });
+    
+    document.getElementById('deleteForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        const bookId = document.getElementById('deleteBookId').value;
+        const formData = new FormData();
+        formData.append('password', document.getElementById('deletePassword').value);
         
-        document.getElementById('deleteForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            const bookId = document.getElementById('deleteBookId').value;
-            const formData = new FormData();
-            formData.append('password', document.getElementById('deletePassword').value);
-            
-            fetch(`/books/delete/${bookId}`, {
-                method: 'POST',
-                body: formData
-            }).then(() => window.location.reload());
+        fetch(`/books/delete/${bookId}`, {
+            method: 'POST',
+            body: formData
+        }).then(() => {
+            document.querySelector('.actions-panel').style.display = 'none';
+            window.location.reload();
         });
-    </script>
-    <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
-</body>
-</html>
+    });
+</script>
+<script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+{% endblock %}
 

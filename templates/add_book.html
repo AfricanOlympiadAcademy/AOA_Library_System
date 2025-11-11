@@ -1,40 +1,33 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Book - AOA Library</title>
-    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='assets/aoa.ico') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-</head>
-<body class="page">
-    <nav class="navbar">
-        <div class="nav-brand">
-            <h1>Add Book</h1>
-        </div>
-        <div class="nav-actions">
-            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
-        </div>
-    </nav>
-    
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">
-                        <span>{{ message }}</span>
-                        <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-        
-        <div class="form-container">
-            <form method="POST" action="{{ url_for('add_book') }}">
+{% extends 'base.html' %}
+
+{% block title %}Add Book - AOA Library{% endblock %}
+
+{% block page_header %}
+<div class="page-header d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0">Add Book</h3>
+</div>
+{% endblock %}
+
+{% block content %}
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    <span>{{ message }}</span>
+                    <button class="alert-close" onclick="this.parentElement.remove()">&times;</button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="form-container">
+        <form method="POST" action="{{ url_for('add_book') }}">
+            <div class="form-row">
                 <div class="form-group">
                     <label for="subject">CATEGORY</label>
-                    <select id="subject" name="subject" required>
+                    <select id="subject" name="subject" required class="form-select">
                         <option value="">Select Category</option>
+                        <option value="Unclassified">Unclassified</option>
                         <option value="African Fiction">African Fiction</option>
                         <option value="Other Fiction">Other Fiction</option>
                         <option value="Non-fiction">Non-fiction</option>
@@ -44,32 +37,36 @@
                         <option value="Olympiad">Olympiad</option>
                     </select>
                 </div>
-                
-                <div class="form-group">
-                    <label for="title">TITLE</label>
-                    <input type="text" id="title" name="title" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="author">AUTHOR</label>
-                    <input type="text" id="author" name="author" required>
-                </div>
-                
-                <div class="form-group">
-                    <label for="book_id">BOOK ID (Optional - only for single copy)</label>
-                    <input type="text" id="book_id" name="book_id">
-                </div>
-                
+
                 <div class="form-group">
                     <label for="copies">COPIES</label>
-                    <input type="number" id="copies" name="copies" value="1" min="1" required>
+                    <input type="number" id="copies" name="copies" value="1" min="1" required class="form-control">
                 </div>
-                
-                <button type="submit" class="btn btn-success btn-block">ADD</button>
-            </form>
-        </div>
+            </div>
+
+            <div class="form-group">
+                <label for="title">TITLE</label>
+                <input type="text" id="title" name="title" required class="form-control">
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="author">AUTHOR</label>
+                    <input type="text" id="author" name="author" required class="form-control">
+                </div>
+
+                <div class="form-group">
+                    <label for="book_id">BOOK ID (Optional - only for single copy)</label>
+                    <input type="text" id="book_id" name="book_id" class="form-control">
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-success btn-block">ADD</button>
+        </form>
     </div>
-    <script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
-</body>
-</html>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/alerts.js') }}"></script>
+{% endblock %}
 
