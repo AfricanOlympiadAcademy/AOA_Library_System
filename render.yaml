@@ -9,4 +9,17 @@ services:
         value: 3.11.0
       - key: FLASK_ENV
         value: production
+      # Email configuration - Set these in Render Dashboard under Environment Variables
+      # DO NOT put actual passwords here - set them in Render Dashboard instead
+      - key: EMAIL_ENABLED
+        value: "true"
+      - key: SMTP_SERVER
+        value: "smtp.gmail.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: EMAIL_ADDRESS
+        value: "tech@africanolympiadfoundation.org"
+      # EMAIL_PASSWORD - Set this in Render Dashboard (not here for security)
+      - key: LIBRARY_NAME
+        value: "AOA Library"
 
