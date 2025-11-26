@@ -1,11 +1,14 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, g
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, g, send_file
 import sqlite3 as sqlite
 import os
 import sys
 import json
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+try:
+    import resend
+    RESEND_AVAILABLE = True
+except ImportError:
+    RESEND_AVAILABLE = False
+    print("WARNING: resend package not installed. Install with: pip install resend")
 from datetime import datetime, timedelta
 import schedule
 import threading
@@ -157,13 +160,13 @@ def populate_initial_students():
 def load_email_config():
     """Load email configuration from environment variables (production) or email_config.json (development)"""
     # Try environment variables first (more secure for production)
-    if os.getenv('SMTP_SERVER'):
+    # Check for Resend API key first (preferred method)
+    if os.getenv('RESEND_API_KEY'):
         return {
             'enabled': os.getenv('EMAIL_ENABLED', 'true').lower() == 'true',
-            'smtp_server': os.getenv('SMTP_SERVER'),
-            'smtp_port': int(os.getenv('SMTP_PORT', '587')),
-            'email_address': os.getenv('EMAIL_ADDRESS'),
-            'email_password': os.getenv('EMAIL_PASSWORD'),
+            'provider': 'resend',
+            'resend_api_key': os.getenv('RESEND_API_KEY'),
+            'email_address': os.getenv('EMAIL_ADDRESS', 'tech@africanolympiadfoundation.org'),
             'library_name': os.getenv('LIBRARY_NAME', 'AOA Library')
         }
     
@@ -171,7 +174,10 @@ def load_email_config():
     try:
         config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'email_config.json')
         with open(config_path, 'r') as f:
-            return json.load(f)
+            config = json.load(f)
+            # Always use Resend
+            config['provider'] = 'resend'
+            return config
     except Exception as e:
         print(f"Error loading email config: {e}")
         return None
@@ -198,7 +204,7 @@ def send_email_direct(to_email, subject, body):
     
     if not config:
         print("ERROR: Email config not found - check environment variables or email_config.json")
-        print("  Make sure EMAIL_PASSWORD is set in Render Dashboard Environment variables")
+        print("  Make sure RESEND_API_KEY is set in Render Dashboard Environment variables")
         return False
     
     if not config.get('enabled', False):
@@ -210,52 +216,37 @@ def send_email_direct(to_email, subject, body):
         print("ERROR: email_address not set in config")
         return False
     
-    if not config.get('email_password'):
-        print("ERROR: email_password not set in config")
-        print("  ACTION REQUIRED: Set EMAIL_PASSWORD environment variable in Render Dashboard")
-        return False
-    
-    if not config.get('smtp_server'):
-        print("ERROR: smtp_server not set in config")
-        return False
-    
-    # Log config status (without password)
-    print(f"Email config loaded: server={config.get('smtp_server')}, port={config.get('smtp_port')}, from={config.get('email_address')}, password_set={'Yes' if config.get('email_password') else 'No'}")
-    
     to_email = sanitize_email(to_email)
     if not to_email:
         print("Invalid or dangerous email address provided")
         return False
     
+    # Use Resend API for all email sending
+    if not RESEND_AVAILABLE:
+        print("ERROR: resend package not installed. Install with: pip install resend")
+        return False
+    
+    if not config.get('resend_api_key'):
+        print("ERROR: resend_api_key not set in config")
+        print("  ACTION REQUIRED: Set RESEND_API_KEY environment variable in Render Dashboard")
+        return False
+    
     try:
-        msg = MIMEMultipart()
-        msg['From'] = config['email_address']
-        msg['To'] = to_email
-        msg['Subject'] = subject
-        msg.attach(MIMEText(body, 'html'))
+        resend.api_key = config['resend_api_key']
         
-        # Remove spaces from password (Gmail app passwords sometimes have spaces)
-        email_password = config['email_password'].replace(' ', '')
+        print(f"Attempting to send email to {to_email} via Resend API")
+        params = {
+            "from": config['email_address'],
+            "to": [to_email],
+            "subject": subject,
+            "html": body
+        }
         
-        print(f"Attempting to send email to {to_email} via {config['smtp_server']}:{config['smtp_port']}")
-        server = smtplib.SMTP(config['smtp_server'], config['smtp_port'])
-        server.starttls()
-        server.login(config['email_address'], email_password)
-        server.send_message(msg)
-        server.quit()
-        
-        print(f"✓ Email sent successfully to {to_email}")
+        email = resend.Emails.send(params)
+        print(f"✓ Email sent successfully to {to_email} via Resend (ID: {email.get('id', 'N/A')})")
         return True
-    except smtplib.SMTPAuthenticationError as e:
-        print(f"ERROR: SMTP Authentication failed - {e}")
-        print("  Check: 1) Email password is correct (use Gmail App Password)")
-        print("         2) EMAIL_PASSWORD environment variable is set in Render")
-        return False
-    except smtplib.SMTPException as e:
-        print(f"ERROR: SMTP error - {e}")
-        return False
     except Exception as e:
-        print(f"ERROR sending email: {type(e).__name__}: {e}")
+        print(f"ERROR sending email via Resend: {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -590,6 +581,19 @@ def logout():
 @login_required
 def dashboard():
     return render_template('dashboard.html')
+
+@app.route('/admin/download-database')
+@login_required
+def download_database():
+    """Download database backup"""
+    try:
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f'library_backup_{timestamp}.db'
+        return send_file(DB_PATH, as_attachment=True, download_name=filename)
+    except Exception as e:
+        flash(f'Error downloading database: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
 
 # Books routes
 @app.route('/books/add', methods=['GET', 'POST'])
@@ -1264,27 +1268,23 @@ def test_email():
     # Check environment variables directly
     import os
     env_check = {
-        'SMTP_SERVER': os.getenv('SMTP_SERVER', 'Not set'),
-        'SMTP_PORT': os.getenv('SMTP_PORT', 'Not set'),
+        'RESEND_API_KEY': 'Set' if os.getenv('RESEND_API_KEY') else 'Not set',
         'EMAIL_ADDRESS': os.getenv('EMAIL_ADDRESS', 'Not set'),
-        'EMAIL_PASSWORD': 'Set' if os.getenv('EMAIL_PASSWORD') else 'Not set',
         'EMAIL_ENABLED': os.getenv('EMAIL_ENABLED', 'Not set'),
     }
     
     if config:
         config_status = {
             'enabled': config.get('enabled', False),
+            'provider': 'resend',
             'has_email': bool(config.get('email_address')),
-            'has_password': bool(config.get('email_password')),
-            'smtp_server': config.get('smtp_server', 'Not set'),
-            'smtp_port': config.get('smtp_port', 'Not set'),
             'email_address': config.get('email_address', 'Not set'),
+            'has_resend_key': bool(config.get('resend_api_key')),
+            'resend_api_key': 'Set' if config.get('resend_api_key') else 'Not set'
         }
     
     return render_template('test_email.html', config=config_status, env_check=env_check)
 
-# Initialize email worker and reminder system (works with both direct run and gunicorn)
-# This runs when the module is imported, ensuring emails work in production
 try:
     with app.app_context():
         get_db()

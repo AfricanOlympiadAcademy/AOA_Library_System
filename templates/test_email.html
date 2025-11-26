@@ -26,21 +26,13 @@
         <h5 style="margin-top: 20px;">Environment Variables (from Render):</h5>
         <table class="table" style="margin-bottom: 20px;">
             <tr>
-                <td><strong>SMTP_SERVER:</strong></td>
-                <td>{{ env_check.SMTP_SERVER }}</td>
-            </tr>
-            <tr>
-                <td><strong>SMTP_PORT:</strong></td>
-                <td>{{ env_check.SMTP_PORT }}</td>
-            </tr>
-            <tr>
                 <td><strong>EMAIL_ADDRESS:</strong></td>
                 <td>{{ env_check.EMAIL_ADDRESS }}</td>
             </tr>
             <tr>
-                <td><strong>EMAIL_PASSWORD:</strong></td>
+                <td><strong>RESEND_API_KEY:</strong></td>
                 <td>
-                    {% if env_check.EMAIL_PASSWORD == 'Set' %}
+                    {% if env_check.RESEND_API_KEY == 'Set' %}
                         <span style="color: green;">✓ Set</span>
                     {% else %}
                         <span style="color: red;">✗ Not Set</span>
@@ -56,6 +48,10 @@
         <h5 style="margin-top: 20px;">Loaded Configuration:</h5>
         <table class="table" style="margin-bottom: 30px;">
             <tr>
+                <td><strong>Provider:</strong></td>
+                <td><span style="color: #0066cc; font-weight: bold;">Resend API</span></td>
+            </tr>
+            <tr>
                 <td><strong>Email Enabled:</strong></td>
                 <td>
                     {% if config.enabled %}
@@ -66,38 +62,30 @@
                 </td>
             </tr>
             <tr>
-                <td><strong>Email Address:</strong></td>
+                <td><strong>From Email Address:</strong></td>
                 <td>{{ config.email_address }}</td>
             </tr>
             <tr>
-                <td><strong>Email Password:</strong></td>
+                <td><strong>Resend API Key:</strong></td>
                 <td>
-                    {% if config.has_password %}
+                    {% if config.has_resend_key %}
                         <span style="color: green;">✓ Set</span>
                     {% else %}
                         <span style="color: red;">✗ Not Set</span>
                     {% endif %}
                 </td>
             </tr>
-            <tr>
-                <td><strong>SMTP Server:</strong></td>
-                <td>{{ config.smtp_server }}</td>
-            </tr>
-            <tr>
-                <td><strong>SMTP Port:</strong></td>
-                <td>{{ config.smtp_port }}</td>
-            </tr>
         </table>
 
-        {% if not config.has_password %}
+        {% if not config.has_resend_key %}
         <div class="alert alert-error" style="background-color: #f8d7da; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
-            <strong>⚠️ Email Password Not Set!</strong><br>
-            You need to set the <code>EMAIL_PASSWORD</code> environment variable in Render Dashboard.
+            <strong>⚠️ Resend API Key Not Set!</strong><br>
+            You need to set the <code>RESEND_API_KEY</code> environment variable in Render Dashboard.
             <ol style="margin-top: 10px; padding-left: 20px;">
                 <li>Go to <a href="https://dashboard.render.com" target="_blank">Render Dashboard</a></li>
                 <li>Select your service: <strong>aoa-library-system</strong></li>
                 <li>Go to <strong>Environment</strong> tab</li>
-                <li>Add: <code>EMAIL_PASSWORD</code> = <code>your-gmail-app-password</code></li>
+                <li>Add: <code>RESEND_API_KEY</code> = <code>your-resend-api-key</code></li>
                 <li>Save and redeploy</li>
             </ol>
         </div>
@@ -123,25 +111,25 @@
                 <li>Add these variables:
                     <ul>
                         <li><code>EMAIL_ENABLED</code> = <code>true</code></li>
-                        <li><code>SMTP_SERVER</code> = <code>smtp.gmail.com</code></li>
-                        <li><code>SMTP_PORT</code> = <code>587</code></li>
                         <li><code>EMAIL_ADDRESS</code> = <code>tech@africanolympiadfoundation.org</code></li>
-                        <li><code>EMAIL_PASSWORD</code> = <code>your-gmail-app-password</code> (IMPORTANT!)</li>
+                        <li><code>RESEND_API_KEY</code> = <code>your-resend-api-key</code> (IMPORTANT!)</li>
                         <li><code>LIBRARY_NAME</code> = <code>AOA Library</code></li>
                     </ul>
                 </li>
                 <li>Click <strong>"Save Changes"</strong> - Render will auto-redeploy</li>
             </ol>
             
-            <h5 style="margin-top: 20px;">Gmail App Password:</h5>
-            <p>If using Gmail, you need an <strong>App Password</strong>, not your regular password:</p>
+            <h5 style="margin-top: 20px;">Get Your Resend API Key:</h5>
+            <p>You need a Resend API key from <a href="https://resend.com" target="_blank">resend.com</a>:</p>
             <ol>
-                <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank">Google App Passwords</a></li>
-                <li>Enable 2-Step Verification if not already enabled</li>
-                <li>Generate a new app password for "Mail"</li>
-                <li>Copy the 16-character password (remove spaces)</li>
-                <li>Use it as <code>EMAIL_PASSWORD</code> in Render</li>
+                <li>Go to <a href="https://resend.com/login" target="_blank">Resend Login</a> and sign in</li>
+                <li>Navigate to <strong>API Keys</strong> in the dashboard</li>
+                <li>Click <strong>"Create API Key"</strong></li>
+                <li>Give it a name (e.g., "AOA Library Production")</li>
+                <li>Copy the generated API key (starts with "re_")</li>
+                <li>Add it as <code>RESEND_API_KEY</code> in Render Environment Variables</li>
             </ol>
+            <p style="margin-top: 15px;"><strong>Note:</strong> Make sure your sending domain (<code>africanolympiadfoundation.org</code>) is verified in Resend. The DNS records shown at the top of this page should be added to your domain's DNS settings.</p>
         </div>
     </div>
 {% endblock %}

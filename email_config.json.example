@@ -1,9 +1,7 @@
 {
   "enabled": true,
-  "smtp_server": "smtp.gmail.com",
-  "smtp_port": 587,
+  "provider": "resend",
+  "resend_api_key": "YOUR_RESEND_API_KEY_HERE",
   "email_address": "tech@africanolympiadfoundation.org",
-  "email_password": "xnfc kkde jmdo qzmn",
   "library_name": "AOA Library"
 }
-

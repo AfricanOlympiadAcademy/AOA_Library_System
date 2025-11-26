@@ -1,209 +1,102 @@
-# AOA Library Management System - Web Version
+# AOA Library Management System
 
-A fully web-based library management system with all the features of the desktop version. Built with Flask and modern web technologies for easy access from any device.
+A web-based library management system built with Flask. Manage books, students, assignments, and returns with automated email notifications.
 
 ## Features
 
-All desktop features have been preserved in the web version:
-- Complete book management with categories
+- Book management with categories and tracking
 - Student registration and management
 - Book assignment and return operations
-- Email notifications (assignment, return, overdue reminders)
+- Automated email notifications via Resend API
 - Staff tracking for all operations
-- Deleted items history
-- Modern, responsive web interface
+- History of deleted items
+- Responsive web interface
 
-## Installation & Setup
-
-### Requirements
-- Python 3.x
-- Web browser (Chrome, Firefox, Safari, Edge)
-- Internet connection (for email features)
-
-### Quick Start
+## Quick Start
 
 1. **Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 
-2. **Configure email (optional):**
+2. **Configure email:**
 ```bash
 cp email_config.json.example email_config.json
-# Edit email_config.json with your email credentials
+# Edit email_config.json with your Resend API key
 ```
 
-3. **Run the web server:**
+3. **Run the application:**
 ```bash
-python web_app.py
+python app.py
 ```
 
 4. **Access the system:**
-   - Open your browser
-   - Navigate to `http://localhost:5000`
-   - Login with:
-     - **Admin ID:** `AOA_Admin`
-     - **Password:** `AOA@2027`
+   - Open browser to `http://localhost:5000`
 
-## Web-Specific Features
-
-### Responsive Design
-- Works on desktop, tablet, and mobile devices
-- Touch-friendly interface
-- Optimized for various screen sizes
-
-### Real-time Updates
-- Instant feedback on all operations
-- Flash messages for user notifications
-- No page refreshes needed for many operations
-
-### Modern UI
-- Clean, professional design
-- AOA Library branding
-- Intuitive navigation
-- Accessible controls
-
-## Deployment
-
-### Local Network Access
-
-To access from other devices on your local network:
-
-1. Find your computer's IP address:
-   - Windows: `ipconfig` in command prompt
-   - Mac/Linux: `ifconfig` in terminal
-
-2. Update the Flask app to bind to all interfaces:
-   - Already configured: `app.run(host='0.0.0.0', port=5000)`
-
-3. Access from other devices:
-   - Use `http://YOUR_IP_ADDRESS:5000`
-
-### Production Deployment
-
-For production deployment, consider:
-
-**Option 1: Gunicorn (Recommended)**
-```bash
-pip install gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 web_app:app
-```
-
-**Option 2: Docker**
-Create a `Dockerfile`:
-```dockerfile
-FROM python:3.9-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install -r requirements.txt
-COPY . .
-CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "web_app:app"]
-```
-
-**Option 3: Cloud Platforms**
-- Heroku
-- AWS Elastic Beanstalk
-- Google Cloud App Engine
-- DigitalOcean App Platform
-
-## Database
-
-The web version uses the same SQLite database as the desktop version (`library.db`). Both versions can share the same database file, allowing for seamless migration or dual usage.
-
-## Differences from Desktop Version
-
-| Feature | Desktop | Web |
-|---------|---------|-----|
-| Installation | Executable | Web browser only |
-| Access | Single machine | Any device with network access |
-| Updates | Manual | Instant on server |
-| Backup | Manual DB copy | Same database file |
-| Email | Same | Same |
-| Features | All | All |
-
-## File Structure
+## Project Structure
 
 ```
-Library-Management/
-├── web_app.py              # Flask web application
-├── app.py                  # Original desktop app (still works)
-├── requirements.txt        # Python dependencies
-├── email_config.json       # Email settings
-├── library.db              # Shared database
-├── templates/              # HTML templates
+AOA_Library_System/
+├── app.py                      # Main Flask application
+├── requirements.txt            # Python dependencies
+├── render.yaml                 # Render deployment config
+├── email_config.json.example   # Email config template
+├── library.db                  # SQLite database
+├── templates/                  # HTML templates
 │   ├── login.html
 │   ├── dashboard.html
 │   ├── add_book.html
-│   ├── view_books.html
-│   └── ... (all pages)
-├── static/
-│   ├── css/
-│   │   └── style.css      # Modern styling
-│   └── js/
-│       └── main.js        # JavaScript
-└── README_WEB.md          # This file
+│   └── ...
+└── static/
+    ├── css/style.css
+    └── js/
+        ├── main.js
+        └── alerts.js
 ```
 
-## Security Notes
+## Email Configuration
 
-**For Production Deployment:**
+### Local Development
+1. Copy `email_config.json.example` to `email_config.json`
+2. Add your Resend API key
+3. File is gitignored for security
 
-1. **Change the secret key** in `web_app.py`:
-```python
-app.secret_key = 'your-unique-secret-key-here'
-```
+### Production (Render)
+Set environment variables in Render Dashboard:
+- `RESEND_API_KEY` - Your Resend API key
+- `EMAIL_ADDRESS` - From email address
+- `EMAIL_ENABLED` - Set to `true`
 
-2. **Enable HTTPS** using SSL certificates
+Get your API key at [resend.com](https://resend.com)
 
-3. **Use a proper WSGI server** (Gunicorn, uWSGI) instead of Flask's development server
+## Deployment to Render
 
-4. **Implement firewall rules** to restrict access if needed
+1. Push code to GitHub
+2. Connect repository in Render Dashboard
+3. Set environment variables (see above)
+4. Deploy automatically via `render.yaml`
 
-5. **Regular database backups**
+## Security
 
-6. **Keep email configuration secure**
+- Never commit `email_config.json` (already in `.gitignore`)
+- Use environment variables for production
+- Change `app.secret_key` in production
+- If API key is exposed: revoke immediately and generate new one
 
 ## Troubleshooting
 
-### Port Already in Use
-If port 5000 is busy:
-```python
-# Edit web_app.py, change last line:
-app.run(debug=True, host='0.0.0.0', port=5001)
-```
+**Email not working:**
+- Verify `RESEND_API_KEY` is set
+- Check domain is verified in Resend
+- Review app logs for errors
 
-### Database Locked
-- Close the desktop app if running
-- Ensure only one instance accessing the database
+**Port already in use:**
+Change port in `app.py`: `app.run(port=5001)`
 
-### Email Not Working
-- Check `email_config.json` exists
-- Verify email settings are correct
-- Test with a simple SMTP connection
-
-### Styling Issues
-- Clear browser cache (Ctrl+F5)
-- Check static files are loading
-- Verify `static/css/style.css` exists
-
-## Migration from Desktop
-
-To migrate from desktop to web:
-
-1. Your existing `library.db` works as-is
-2. Run web version alongside desktop (not at same time due to DB locking)
-3. Copy `email_config.json` to new location if needed
-4. All data is immediately available in web version
-
-## Support
-
-For issues specific to the web version:
-- Check browser console for errors
-- Review Flask server logs
-- Verify all static files are present
-- Test with different browsers
+**Database locked:**
+Close any other instances accessing `library.db`
 
 ## License
 
-Same as desktop version - for AOA Library use.
+For AOA Library use.
 
