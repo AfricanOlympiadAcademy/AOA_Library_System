@@ -36,8 +36,8 @@
         <table class="data-table table">
             <thead>
                 <tr>
-                    <th>Category</th>
                     <th>Title</th>
+                    <th>Category</th>
                     <th>Author</th>
                     <th>Total Copies</th>
                     <th>Available Copies</th>
@@ -47,8 +47,8 @@
             <tbody>
                 {% for title in titles %}
                 <tr>
-                    <td>{{ title.subject }}</td>
                     <td>{{ title.title }}</td>
+                    <td>{{ title.subject }}</td>
                     <td>{{ title.author }}</td>
                     <td>{{ title.total }}</td>
                     <td>{{ title.available }}</td>
