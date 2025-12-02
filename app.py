@@ -1,7 +1,5 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, g, send_file
-import sqlite3 as sqlite
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, g, send_file, Response
 import os
-import sys
 import json
 try:
     import resend
@@ -9,7 +7,16 @@ try:
 except ImportError:
     RESEND_AVAILABLE = False
     print("WARNING: resend package not installed. Install with: pip install resend")
-from datetime import datetime, timedelta
+try:
+    import psycopg2
+    from psycopg2.extras import RealDictCursor
+    import urllib.parse as urlparse
+    POSTGRES_AVAILABLE = True
+except ImportError:
+    POSTGRES_AVAILABLE = False
+    print("ERROR: psycopg2 not installed. PostgreSQL is required. Install with: pip install psycopg2-binary")
+    raise ImportError("psycopg2-binary is required. Install with: pip install psycopg2-binary")
+from datetime import datetime, timedelta, date
 import schedule
 import threading
 import time
@@ -18,93 +25,206 @@ import queue
 from functools import wraps
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-this-in-production'  # Change this in production!
+app.secret_key = os.getenv('SECRET_KEY', 'your-secret-key-change-this-in-production')  # Use SECRET_KEY env var in production
 
-DB_PATH = None
 _db_initialized = False
+DATABASE_URL = os.getenv('DATABASE_URL')
+
+# PostgreSQL is required - no SQLite fallback
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is required. Please set it in Render Dashboard.")
+if not POSTGRES_AVAILABLE:
+    raise ImportError("PostgreSQL support is required. Install psycopg2-binary.")
 
 # Email queue for background sending
 email_queue = queue.Queue()
 email_worker_thread = None
 
-def _resolve_db_path():
-    if getattr(sys, 'frozen', False):
-        base_dir = os.path.dirname(sys.executable)
-    else:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-    return os.path.join(base_dir, 'library.db')
+def _get_postgres_connection():
+    """Get PostgreSQL connection from DATABASE_URL"""
+    if not DATABASE_URL:
+        raise ValueError("DATABASE_URL environment variable is required")
+    if not POSTGRES_AVAILABLE:
+        raise ImportError("PostgreSQL support is required. Install psycopg2-binary")
+    
+    try:
+        # Parse DATABASE_URL (format: postgresql://user:password@host:port/dbname)
+        parsed = urlparse.urlparse(DATABASE_URL)
+        conn = psycopg2.connect(
+            database=parsed.path[1:],  # Remove leading '/'
+            user=parsed.username,
+            password=parsed.password,
+            host=parsed.hostname,
+            port=parsed.port
+        )
+        return conn
+    except Exception as e:
+        print(f"Error connecting to PostgreSQL: {e}")
+        raise
+
+def _get_db_connection():
+    """Get a database connection (for background threads)"""
+    return _get_postgres_connection(), 'postgres'
 
 def get_db():
-    """Get database connection (thread-local)"""
-    global DB_PATH, _db_initialized
+    """Get PostgreSQL database connection (thread-local)"""
+    global _db_initialized
     
     if 'db' not in g:
-        if DB_PATH is None:
-            DB_PATH = _resolve_db_path()
-        
-        g.db = sqlite.connect(DB_PATH)
-        g.db.row_factory = sqlite.Row
+        # PostgreSQL is required - no fallback
+        g.db = _get_postgres_connection()
+        g.db_type = 'postgres'
         
         # Initialize tables only once per application startup
         if not _db_initialized:
             cur = g.db.cursor()
             
-            # Create tables if they don't exist
-            cur.execute('CREATE TABLE IF NOT EXISTS Login(name TEXT, userid TEXT, password INTEGER, branch TEXT, mobile INTEGER)')
-            cur.execute('CREATE TABLE IF NOT EXISTS Book(subject TEXT, title TEXT, author TEXT, serial INTEGER PRIMARY KEY)')
-            cur.execute('CREATE TABLE IF NOT EXISTS BookIssue(stdid TEXT, serial TEXT, issue DATE, exp DATE)')
-            cur.execute('CREATE TABLE IF NOT EXISTS BookReturn(stdid TEXT, title TEXT, copies INTEGER, issue DATE, returned DATE)')
-            cur.execute('CREATE TABLE IF NOT EXISTS BookReturnDetail(stdid TEXT, title TEXT, book_id TEXT, issue DATE, returned DATE)')
-            cur.execute('CREATE TABLE IF NOT EXISTS DeletedLogin(name TEXT, userid TEXT, deleted DATE)')
-            cur.execute('CREATE TABLE IF NOT EXISTS DeletedBook(subject TEXT, title TEXT, author TEXT, book_id TEXT, deleted DATE)')
+            # PostgreSQL table creation
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS Login(
+                    name TEXT, userid TEXT, password INTEGER, 
+                    branch TEXT, mobile INTEGER, email TEXT
+                )
+            ''')
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS Book(
+                    subject TEXT, title TEXT, author TEXT, 
+                    serial SERIAL PRIMARY KEY, book_id TEXT UNIQUE
+                )
+            ''')
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS BookIssue(
+                    stdid TEXT, serial TEXT, issue DATE, exp DATE, 
+                    book_id TEXT, assigned_by TEXT
+                )
+            ''')
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS BookReturn(
+                    stdid TEXT, title TEXT, copies INTEGER, 
+                    issue DATE, returned DATE
+                )
+            ''')
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS BookReturnDetail(
+                    stdid TEXT, title TEXT, book_id TEXT, 
+                    issue DATE, returned DATE, returned_by TEXT
+                )
+            ''')
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS DeletedLogin(
+                    name TEXT, userid TEXT, deleted DATE
+                )
+            ''')
+            cur.execute('''
+                CREATE TABLE IF NOT EXISTS DeletedBook(
+                    subject TEXT, title TEXT, author TEXT, 
+                    book_id TEXT, deleted DATE
+                )
+            ''')
             g.db.commit()
+            
+            # Fix SERIAL sequence if needed (after migration, sequences can be out of sync)
+            # PostgreSQL creates sequences automatically for SERIAL columns
+            # Format: tablename_columnname_seq
+            try:
+                cur.execute("SELECT setval('book_serial_seq', COALESCE((SELECT MAX(serial) FROM Book), 1), true)")
+                g.db.commit()
+            except Exception as e:
+                # Sequence might not exist or already correct, ignore
+                g.db.rollback()
             
             # Add missing columns if needed
             def _table_columns(name: str):
-                cur.execute("PRAGMA table_info('%s')" % (name,))
-                return [r[1] for r in cur.fetchall()]
+                # PostgreSQL stores table names in lowercase unless quoted
+                cur.execute("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE LOWER(table_name) = LOWER(%s)
+                """, (name,))
+                return [r[0].lower() for r in cur.fetchall()]  # Normalize to lowercase for comparison
             
-            book_cols = _table_columns('Book')
-            if 'book_id' not in book_cols:
-                cur.execute("ALTER TABLE Book ADD COLUMN book_id TEXT")
-                g.db.commit()
-                cur.execute("UPDATE Book SET book_id = CAST(serial AS TEXT) WHERE book_id IS NULL OR book_id = ''")
-                g.db.commit()
-                cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_book_book_id ON Book(book_id)")
-                g.db.commit()
+            def _has_column(table_name: str, column_name: str) -> bool:
+                """Check if a column exists in a table (case-insensitive)"""
+                cols = _table_columns(table_name)
+                return column_name.lower() in cols
             
-            issue_cols = _table_columns('BookIssue')
-            if 'book_id' not in issue_cols:
-                cur.execute("ALTER TABLE BookIssue ADD COLUMN book_id TEXT")
-                g.db.commit()
-                cur.execute("UPDATE BookIssue SET book_id = (SELECT b.book_id FROM Book b WHERE b.serial = BookIssue.serial) WHERE book_id IS NULL")
-                g.db.commit()
-            if 'assigned_by' not in _table_columns('BookIssue'):
-                cur.execute("ALTER TABLE BookIssue ADD COLUMN assigned_by TEXT")
-                g.db.commit()
+            # Check and add book_id to Book table
+            if not _has_column('Book', 'book_id'):
+                try:
+                    cur.execute("ALTER TABLE Book ADD COLUMN book_id TEXT")
+                    g.db.commit()
+                    cur.execute("UPDATE Book SET book_id = CAST(serial AS TEXT) WHERE book_id IS NULL OR book_id = ''")
+                    g.db.commit()
+                    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_book_book_id ON Book(book_id)")
+                    g.db.commit()
+                except Exception as e:
+                    # Column might already exist, ignore
+                    g.db.rollback()
             
-            login_cols = _table_columns('Login')
-            if 'email' not in login_cols:
-                cur.execute("ALTER TABLE Login ADD COLUMN email TEXT")
-                g.db.commit()
+            # Check and add book_id to BookIssue table
+            if not _has_column('BookIssue', 'book_id'):
+                try:
+                    cur.execute("ALTER TABLE BookIssue ADD COLUMN book_id TEXT")
+                    g.db.commit()
+                    cur.execute("UPDATE BookIssue SET book_id = (SELECT b.book_id FROM Book b WHERE CAST(b.serial AS TEXT) = BookIssue.serial) WHERE book_id IS NULL")
+                    g.db.commit()
+                except Exception as e:
+                    g.db.rollback()
             
-            return_detail_cols = _table_columns('BookReturnDetail')
-            if 'returned_by' not in return_detail_cols:
-                cur.execute("ALTER TABLE BookReturnDetail ADD COLUMN returned_by TEXT")
-                g.db.commit()
+            # Check and add assigned_by to BookIssue table
+            if not _has_column('BookIssue', 'assigned_by'):
+                try:
+                    cur.execute("ALTER TABLE BookIssue ADD COLUMN assigned_by TEXT")
+                    g.db.commit()
+                except Exception as e:
+                    g.db.rollback()
+            
+            # Check and add email to Login table
+            if not _has_column('Login', 'email'):
+                try:
+                    cur.execute("ALTER TABLE Login ADD COLUMN email TEXT")
+                    g.db.commit()
+                except Exception as e:
+                    g.db.rollback()
+            
+            # Check and add returned_by to BookReturnDetail table
+            if not _has_column('BookReturnDetail', 'returned_by'):
+                try:
+                    cur.execute("ALTER TABLE BookReturnDetail ADD COLUMN returned_by TEXT")
+                    g.db.commit()
+                except Exception as e:
+                    g.db.rollback()
             
             g.db.commit()
             _db_initialized = True
     
     return g.db
 
+class CursorWrapper:
+    """Wrapper to convert SQLite-style ? parameters to PostgreSQL %s"""
+    def __init__(self, cursor):
+        self.cursor = cursor
+    
+    def execute(self, query, params=None):
+        if params is not None:
+            # Convert ? to %s for PostgreSQL
+            query = query.replace('?', '%s')
+            return self.cursor.execute(query, params)
+        else:
+            return self.cursor.execute(query)
+    
+    def __getattr__(self, name):
+        return getattr(self.cursor, name)
+
 def get_cursor():
-    """Get database cursor (thread-local)"""
-    return get_db().cursor()
+    """Get PostgreSQL database cursor (thread-local)"""
+    db = get_db()
+    cur = db.cursor(cursor_factory=RealDictCursor)
+    return CursorWrapper(cur)
 
 @app.teardown_appcontext
 def close_db(error):
-    """Close database connection at the end of request"""
+    """Close PostgreSQL database connection at the end of request"""
     db = g.pop('db', None)
     if db is not None:
         db.close()
@@ -114,46 +234,51 @@ def populate_initial_students():
     db = get_db()
     cur = get_cursor()
     initial_students = [
-        ('Kesha', 'Wanjare', 'wanjare.k@aoa.school'),
-        ('Esther', 'Apendi', 'apendi.e@aoa.school'),
-        ('Ethan', 'Mutyaba', 'mutyaba.e@aoa.school'),
-        ('Baruch', 'Rugero', 'rugero.b@aoa.school'),
-        ('Tokollo', 'Shaku', 'shaku.t@aoa.school'),
-        ('Tumi', 'Nyagiro', 'nyagiro.t@aoa.school'),
-        ('Imelda', 'Ikuzwe', 'ikuzwe.i@aoa.school'),
-        ('Baraka', 'Mulwa', 'mulwa.b@aoa.school'),
-        ('Sweetbert', 'Nene', 'nene.s@aoa.school'),
-        ('Flora', 'Ineza', 'ineza.f@aoa.school'),
-        ('Sonia', 'Keza', 'keza.s@aoa.school'),
-        ('Lightness', 'Ngilule', 'ngilule.l@aoa.school'),
-        ('Margaret', 'Angel', 'angel.m@aoa.school'),
-        ('Herve', 'Uwayezu', 'uwayezu.h@aoa.school'),
-        ('Elizabeth', 'Musiimenta', 'musiimenta.e@aoa.school'),
-        ('Nathan', 'Khiisa', 'khiisa.n@aoa.school'),
-        ('Joyce', 'Sulumo', 'sulumo.j@aoa.school'),
-        ('Denys', 'Tuyisenge', 'tuyisenge.d@aoa.school'),
-        ('Jayden', 'Osago', 'osago.j@aoa.school'),
-        ('Roland', 'Ndjamba', 'ndjamba.r@aoa.school'),
-        ('Andile', 'Kebopetswe', 'kebopetswe.a@aoa.school'),
-        ('Stephanie', 'Kwenantsi', 'kwenantsi.s@aoa.school'),
-        ('Helena', 'Haikali', 'haikali.h@aoa.school'),
-        ('Anton', 'Wakele', 'wakele.a@aoa.school'),
-        ('Lebone', 'Tau', 'tau.l@aoa.school'),
-        ('Prince', 'Sokwe', 'sokwe.p@aoa.school'),
-        ('Abasiofon', 'Sampson', 'sampson.a@aoa.school'),
-        ('Chimfumnanya', 'Aghaduno', 'aghaduno.c@aoa.school'),
-        ('Ndungu', 'Kibe', 'kibe.n@aoa.school'),
+    ('Kesha', 'Wanjare', 'kesha.w@aoa.school'),
+    ('Esther', 'Apendi', 'esther.a@aoa.school'),
+    ('Ethan', 'Mutyaba', 'ethan.m@aoa.school'),
+    ('Baruch', 'Rugero', 'baruch.r@aoa.school'),
+    ('Tokollo', 'Shaku', 'tokollo.s@aoa.school'),
+    ('Tumi', 'Nyagiro', 'tumi.n@aoa.school'),
+    ('Imelda', 'Ikuzwe', 'imelda.i@aoa.school'),
+    ('Baraka', 'Mulwa', 'baraka.m@aoa.school'),
+    ('Sweetbert', 'Nene', 'sweetbert.n@aoa.school'),
+    ('Flora', 'Ineza', 'flora.i@aoa.school'),
+    ('Sonia', 'Keza', 'sonia.k@aoa.school'),
+    ('Lightness', 'Ngilule', 'lightness.n@aoa.school'),
+    ('Margaret', 'Angel', 'margaret.a@aoa.school'),
+    ('Herve', 'Uwayezu', 'herve.u@aoa.school'),
+    ('Elizabeth', 'Musiimenta', 'elizabeth.m@aoa.school'),
+    ('Nathan', 'Khiisa', 'nathan.k@aoa.school'),
+    ('Joyce', 'Sulumo', 'joyce.s@aoa.school'),
+    ('Denys', 'Tuyisenge', 'denys.t@aoa.school'),
+    ('Jayden', 'Osago', 'jayden.o@aoa.school'),
+    ('Roland', 'Ndjamba', 'roland.n@aoa.school'),
+    ('Andile', 'Kebopetswe', 'andile.k@aoa.school'),
+    ('Stephanie', 'Kwenantsi', 'stephanie.k@aoa.school'),
+    ('Helena', 'Haikali', 'helena.h@aoa.school'),
+    ('Anton', 'Wakele', 'anton.w@aoa.school'),
+    ('Lebone', 'Tau', 'lebone.t@aoa.school'),
+    ('Prince', 'Sokwe', 'prince.s@aoa.school'),
+    ('Abasiofon', 'Sampson', 'abasiofon.s@aoa.school'),
+    ('Chimfumnanya', 'Aghaduno', 'chimfumnanya.a@aoa.school'),
+    ('Happy', 'David', 'happy.d@aoa.school'),
+    ('Ndungu', 'Kibe', 'ndungu.k@aoa.school'),
+    ('Jed', 'Oloo Odundo', 'jed.o@aoa.school'),
     ]
     
     cur.execute("SELECT COUNT(*) FROM Login")
-    count = cur.fetchone()[0]
+    row = cur.fetchone()
+    count = list(row.values())[0] if row else 0
     
     if count == 0:
         for first, last, email in initial_students:
             full_name = f"{first} {last}"
             cur.execute("SELECT COALESCE(MAX(CAST(userid AS INTEGER)),0) FROM Login")
             row = cur.fetchone()
-            next_id = (row[0] or 0) + 1
+            # RealDictCursor returns dict, get first value
+            max_id = list(row.values())[0] if row else 0
+            next_id = (max_id or 0) + 1
             cur.execute("INSERT INTO Login(name, userid, email) VALUES(?, ?, ?)", (full_name, str(next_id), email))
         db.commit()
 
@@ -326,10 +451,9 @@ def start_email_worker():
 def check_and_send_due_tomorrow_reminders():
     """Check for books due tomorrow and send reminder emails"""
     try:
-        # Background thread - create own connection
-        db = sqlite.connect(_resolve_db_path())
-        db.row_factory = sqlite.Row
-        cur = db.cursor()
+        # Background thread - create own PostgreSQL connection
+        db = _get_postgres_connection()
+        cur = db.cursor(cursor_factory=RealDictCursor)
         config = load_email_config()
         library_name = config.get('library_name', 'AOA Library') if config else 'AOA Library'
         
@@ -339,8 +463,8 @@ def check_and_send_due_tomorrow_reminders():
             SELECT l.name, l.email, b.title, i.book_id, i.exp, i.issue
             FROM BookIssue i
             JOIN Login l ON l.userid = i.stdid
-            JOIN Book b ON b.serial = i.serial
-            WHERE i.exp = ?
+            JOIN Book b ON b.serial = CAST(i.serial AS INTEGER)
+            WHERE i.exp = %s
         """, (tomorrow,))
         
         results = cur.fetchall()
@@ -370,8 +494,8 @@ def check_and_send_due_tomorrow_reminders():
                     <div style="background-color: #fff; padding: 15px; border-left: 4px solid #E8A71D; margin: 20px 0;">
                         <p style="margin: 5px 0;"><strong>Book Title:</strong> {book_title}</p>
                         <p style="margin: 5px 0;"><strong>Book ID:</strong> {book_id}</p>
-                        <p style="margin: 5px 0;"><strong>Date Borrowed:</strong> {datetime.strptime(issue_date, '%Y-%m-%d').strftime('%B %d, %Y')}</p>
-                        <p style="margin: 5px 0;"><strong>Due Date:</strong> <span style="color: #E8A71D; font-weight: bold;">{datetime.strptime(return_date, '%Y-%m-%d').strftime('%B %d, %Y')}</span></p>
+                        <p style="margin: 5px 0;"><strong>Date Borrowed:</strong> {format_date_for_display(issue_date)}</p>
+                        <p style="margin: 5px 0;"><strong>Due Date:</strong> <span style="color: #E8A71D; font-weight: bold;">{format_date_for_display(return_date)}</span></p>
                     </div>
                     
                     <p style="background-color: #FFF3CD; padding: 12px; border-radius: 5px; border-left: 4px solid #E8A71D;">
@@ -406,10 +530,9 @@ def check_and_send_due_tomorrow_reminders():
 def check_and_send_overdue_reminders():
     """Check for overdue books and send reminder emails"""
     try:
-        # Background thread - create own connection
-        db = sqlite.connect(_resolve_db_path())
-        db.row_factory = sqlite.Row
-        cur = db.cursor()
+        # Background thread - create own PostgreSQL connection
+        db = _get_postgres_connection()
+        cur = db.cursor(cursor_factory=RealDictCursor)
         config = load_email_config()
         library_name = config.get('library_name', 'AOA Library') if config else 'AOA Library'
         
@@ -419,8 +542,8 @@ def check_and_send_overdue_reminders():
             SELECT l.name, l.email, b.title, i.book_id, i.exp, i.issue
             FROM BookIssue i
             JOIN Login l ON l.userid = i.stdid
-            JOIN Book b ON b.serial = i.serial
-            WHERE i.exp < ?
+            JOIN Book b ON b.serial = CAST(i.serial AS INTEGER)
+            WHERE i.exp < %s
         """, (today,))
         
         results = cur.fetchall()
@@ -454,8 +577,8 @@ def check_and_send_overdue_reminders():
                     <div style="background-color: #fff; padding: 15px; border-left: 4px solid #C0392B; margin: 20px 0;">
                         <p style="margin: 5px 0;"><strong>Book Title:</strong> {book_title}</p>
                         <p style="margin: 5px 0;"><strong>Book ID:</strong> {book_id}</p>
-                        <p style="margin: 5px 0;"><strong>Date Borrowed:</strong> {datetime.strptime(issue_date, '%Y-%m-%d').strftime('%B %d, %Y')}</p>
-                        <p style="margin: 5px 0;"><strong>Was Due:</strong> <span style="color: #C0392B; font-weight: bold;">{datetime.strptime(return_date, '%Y-%m-%d').strftime('%B %d, %Y')}</span></p>
+                        <p style="margin: 5px 0;"><strong>Date Borrowed:</strong> {format_date_for_display(issue_date)}</p>
+                        <p style="margin: 5px 0;"><strong>Was Due:</strong> <span style="color: #C0392B; font-weight: bold;">{format_date_for_display(return_date)}</span></p>
                         <p style="margin: 5px 0;"><strong>Days Overdue:</strong> <span style="color: #C0392B; font-weight: bold; font-size: 18px;">{days_overdue} day(s)</span></p>
                     </div>
                     
@@ -535,10 +658,38 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# Helper function to format dates for display (handles both strings and date objects)
+def format_date_for_display(date_value):
+    """Format a date value (string or date object) for display"""
+    if date_value is None:
+        return ''
+    
+    # If it's already a datetime or date object, format it directly
+    if isinstance(date_value, datetime):
+        return date_value.strftime('%B %d, %Y')
+    if isinstance(date_value, date):
+        return date_value.strftime('%B %d, %Y')
+    
+    # If it's a string, parse it first
+    if isinstance(date_value, str):
+        try:
+            dt = datetime.strptime(date_value, '%Y-%m-%d')
+            return dt.strftime('%B %d, %Y')
+        except:
+            return date_value
+    
+    return str(date_value)
+
 # Custom Jinja2 filters
 @app.template_filter('date')
 def date_filter(value, format='%Y-%m-%d'):
     """Format a date value"""
+    if value is None:
+        return ''
+    if isinstance(value, datetime):
+        return value.strftime(format)
+    if isinstance(value, date):
+        return value.strftime(format)
     if isinstance(value, str):
         if value == 'now':
             return datetime.now().strftime(format)
@@ -547,9 +698,7 @@ def date_filter(value, format='%Y-%m-%d'):
             return dt.strftime(format)
         except:
             return value
-    elif isinstance(value, datetime):
-        return value.strftime(format)
-    return value
+    return str(value)
 
 # Routes
 @app.route('/')
@@ -585,14 +734,161 @@ def dashboard():
 @app.route('/admin/download-database')
 @login_required
 def download_database():
-    """Download database backup"""
+    """Download PostgreSQL database as SQL dump"""
     try:
-        from datetime import datetime
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'library_backup_{timestamp}.db'
-        return send_file(DB_PATH, as_attachment=True, download_name=filename)
+        get_db()
+        cur = get_cursor()
+        
+        # Get all tables
+        cur.execute("""
+            SELECT table_name 
+            FROM information_schema.tables 
+            WHERE table_schema = 'public' 
+            AND table_type = 'BASE TABLE'
+            ORDER BY table_name
+        """)
+        tables = [row['table_name'] for row in cur.fetchall()]
+        
+        # Generate SQL dump
+        sql_dump = []
+        sql_dump.append("-- AOA Library System Database Dump")
+        sql_dump.append(f"-- Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        sql_dump.append("-- PostgreSQL Database Export")
+        sql_dump.append("")
+        
+        # Export each table
+        for table in tables:
+            sql_dump.append(f"-- Table: {table}")
+            sql_dump.append(f"DROP TABLE IF EXISTS {table} CASCADE;")
+            sql_dump.append("")
+            
+            # Get table structure
+            cur.execute(f"""
+                SELECT column_name, data_type, character_maximum_length, 
+                       is_nullable, column_default
+                FROM information_schema.columns
+                WHERE table_name = %s
+                ORDER BY ordinal_position
+            """, (table,))
+            columns = cur.fetchall()
+            
+            # Build CREATE TABLE statement
+            create_parts = []
+            primary_keys = []
+            
+            # Get primary keys
+            cur.execute(f"""
+                SELECT column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+                WHERE tc.table_name = %s AND tc.constraint_type = 'PRIMARY KEY'
+            """, (table,))
+            pk_cols = [row['column_name'] for row in cur.fetchall()]
+            
+            for col in columns:
+                col_name = col['column_name']
+                data_type = col['data_type']
+                max_length = col['character_maximum_length']
+                is_nullable = col['is_nullable'] == 'YES'
+                default = col['column_default']
+                
+                # Map PostgreSQL types to SQL
+                if data_type == 'character varying':
+                    type_str = f"VARCHAR({max_length})" if max_length else "TEXT"
+                elif data_type == 'integer':
+                    type_str = "INTEGER"
+                elif data_type == 'date':
+                    type_str = "DATE"
+                elif data_type == 'serial':
+                    type_str = "SERIAL"
+                else:
+                    type_str = data_type.upper()
+                
+                col_def = f"{col_name} {type_str}"
+                
+                if not is_nullable:
+                    col_def += " NOT NULL"
+                
+                if default:
+                    # Clean up default value
+                    if 'nextval' in str(default):
+                        col_def += " DEFAULT " + str(default)
+                    else:
+                        col_def += f" DEFAULT {default}"
+                
+                create_parts.append(col_def)
+            
+            # Add PRIMARY KEY if exists
+            if pk_cols:
+                create_parts.append(f"PRIMARY KEY ({', '.join(pk_cols)})")
+            
+            # Add UNIQUE constraints
+            cur.execute(f"""
+                SELECT column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                ON tc.constraint_name = kcu.constraint_name
+                WHERE tc.table_name = %s AND tc.constraint_type = 'UNIQUE'
+            """, (table,))
+            unique_cols = [row['column_name'] for row in cur.fetchall()]
+            if unique_cols:
+                create_parts.append(f"UNIQUE ({', '.join(unique_cols)})")
+            
+            sql_dump.append(f"CREATE TABLE {table} (")
+            sql_dump.append("    " + ",\n    ".join(create_parts))
+            sql_dump.append(");")
+            sql_dump.append("")
+            
+            # Get table data
+            cur.execute(f"SELECT * FROM {table} ORDER BY 1")
+            rows = cur.fetchall()
+            
+            if rows:
+                # Get column names from the first row (RealDictCursor returns dicts)
+                if rows:
+                    col_names = list(rows[0].keys())
+                    sql_dump.append(f"-- Data for table: {table}")
+                    
+                    for row in rows:
+                        values = []
+                        for col_name in col_names:
+                            val = row[col_name]
+                            if val is None:
+                                values.append("NULL")
+                            elif isinstance(val, str):
+                                # Escape single quotes
+                                escaped = val.replace("'", "''")
+                                values.append(f"'{escaped}'")
+                            elif isinstance(val, (datetime,)):
+                                values.append(f"'{val.strftime('%Y-%m-%d')}'")
+                            else:
+                                values.append(str(val))
+                        
+                        sql_dump.append(f"INSERT INTO {table} ({', '.join(col_names)}) VALUES ({', '.join(values)});")
+                    
+                    sql_dump.append("")
+        
+        sql_content = "\n".join(sql_dump)
+        
+        # Create response with SQL file
+        filename = f"aoa_library_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.sql"
+        
+        return Response(
+            sql_content,
+            mimetype='application/sql',
+            headers={
+                'Content-Disposition': f'attachment; filename={filename}',
+                'Content-Type': 'text/plain; charset=utf-8'
+            }
+        )
+        
     except Exception as e:
-        flash(f'Error downloading database: {str(e)}', 'error')
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error in download_database: {str(e)}")
+        print(error_details)
+        flash(f'Error generating database backup: {str(e)}', 'error')
         return redirect(url_for('dashboard'))
 
 # Books routes
@@ -636,9 +932,9 @@ def add_book():
             return redirect(url_for('dashboard'))
         
         for _ in range(copies_int):
-            cur.execute("INSERT INTO Book(subject,title,author) VALUES(?,?,?)", 
+            cur.execute("INSERT INTO Book(subject,title,author) VALUES(?,?,?) RETURNING serial", 
                        (subject, title, author))
-            new_serial = cur.lastrowid
+            new_serial = cur.fetchone()['serial']
             cur.execute("UPDATE Book SET book_id = CAST(serial AS TEXT) WHERE serial = ?", 
                        (new_serial,))
         get_db().commit()
@@ -652,19 +948,16 @@ def add_book():
 def view_books():
     get_db()
     cur = get_cursor()
-    cur.execute('SELECT subject,title,author,book_id FROM Book')
-    books = []
-    for row in cur.fetchall():
-        bid = row['book_id']
-        cur.execute("SELECT 1 FROM BookIssue WHERE book_id=?", (bid,))
-        is_issued = cur.fetchone() is not None
-        books.append({
-            'subject': row['subject'],
-            'title': row['title'],
-            'author': row['author'],
-            'book_id': bid,
-            'available': 'No' if is_issued else 'Yes'
-        })
+    # Use EXISTS subquery to check availability in one efficient query
+    cur.execute("""
+        SELECT b.subject, b.title, b.author, b.book_id,
+               CASE WHEN EXISTS (
+                   SELECT 1 FROM BookIssue i WHERE i.book_id = b.book_id
+               ) THEN 'No' ELSE 'Yes' END AS available
+        FROM Book b
+        ORDER BY b.title, b.book_id
+    """)
+    books = [dict(row) for row in cur.fetchall()]
     return render_template('view_books.html', books=books)
 
 @app.route('/books/edit/<book_id>', methods=['POST'])
@@ -755,7 +1048,7 @@ def delete_book(book_id):
         return redirect(url_for('view_books'))
     
     cur.execute("INSERT INTO DeletedBook(subject, title, author, book_id, deleted) "
-               "SELECT subject, title, author, book_id, DATE('now') FROM Book WHERE book_id=?", (book_id,))
+               "SELECT subject, title, author, book_id, CURRENT_DATE FROM Book WHERE book_id=?", (book_id,))
     cur.execute("DELETE FROM Book WHERE book_id=?", (book_id,))
     get_db().commit()
     flash(f"Deleted Book ID {book_id}", 'success')
@@ -836,7 +1129,9 @@ def add_student():
         full_name = (first_name + (' ' + second_name if second_name else '')).strip()
         cur.execute("SELECT COALESCE(MAX(CAST(userid AS INTEGER)),0) FROM Login")
         row = cur.fetchone()
-        new_id = (row[0] or 0) + 1
+        # RealDictCursor returns dict, get first value
+        max_id = list(row.values())[0] if row else 0
+        new_id = (max_id or 0) + 1
         cur.execute("INSERT INTO Login(name, userid, email) VALUES(?, ?, ?)", (full_name, str(new_id), email))
         get_db().commit()
         flash(f"Student {full_name} added", 'success')
@@ -870,7 +1165,7 @@ def delete_student(userid):
         return redirect(url_for('view_students'))
     
     cur.execute("INSERT INTO DeletedLogin(name, userid, deleted) "
-               "SELECT name, userid, DATE('now') FROM Login WHERE userid=?", (userid,))
+               "SELECT name, userid, CURRENT_DATE FROM Login WHERE userid=?", (userid,))
     cur.execute("DELETE FROM Login WHERE userid=?", (userid,))
     get_db().commit()
     flash('Student deleted', 'success')
@@ -936,7 +1231,7 @@ def assign_book():
             cur.execute("SELECT serial FROM Book WHERE book_id=?", (bid,))
             serial = cur.fetchone()['serial']
             cur.execute("INSERT INTO BookIssue(stdid, serial, issue, exp, book_id, assigned_by) "
-                       "VALUES(?, ?, DATE('now'), ?, ?, ?)", (student_id, serial, return_date, bid, assigned_by))
+                       "VALUES(?, ?, CURRENT_DATE, ?, ?, ?)", (student_id, serial, return_date, bid, assigned_by))
         get_db().commit()
         
         # Send email
@@ -1030,7 +1325,7 @@ def view_assignments():
                i.assigned_by AS assigned_by
         FROM BookIssue i
         JOIN Login l ON l.userid = i.stdid
-        JOIN Book b ON b.serial = i.serial
+        JOIN Book b ON b.serial = CAST(i.serial AS INTEGER)
         ORDER BY i.issue DESC, l.name, b.title, i.book_id
     """)
     assignments = [dict(row) for row in cur.fetchall()]
@@ -1067,7 +1362,15 @@ def return_book():
         cur.execute("SELECT i.issue FROM BookIssue i WHERE i.stdid=? AND i.book_id=?", 
                    (student_id, book_ids[0]))
         row_issue = cur.fetchone()
-        issue_date = row_issue['issue'] if row_issue else return_date
+        if row_issue:
+            issue_date_obj = row_issue['issue']
+            # Convert date object to string if needed
+            if isinstance(issue_date_obj, date):
+                issue_date = issue_date_obj.strftime('%Y-%m-%d')
+            else:
+                issue_date = str(issue_date_obj)
+        else:
+            issue_date = return_date
         
         # Insert return records
         cur.execute("INSERT INTO BookReturn(stdid, title, copies, issue, returned) "
@@ -1101,8 +1404,8 @@ def return_book():
                     {book_list_html}
                     
                     <div style="background-color: #fff; padding: 15px; border-left: 4px solid #64A772; margin: 20px 0;">
-                        <p style="margin: 5px 0;"><strong>Date Borrowed:</strong> {datetime.strptime(issue_date, '%Y-%m-%d').strftime('%B %d, %Y')}</p>
-                        <p style="margin: 5px 0;"><strong>Date Returned:</strong> {datetime.strptime(return_date, '%Y-%m-%d').strftime('%B %d, %Y')}</p>
+                        <p style="margin: 5px 0;"><strong>Date Borrowed:</strong> {format_date_for_display(issue_date)}</p>
+                        <p style="margin: 5px 0;"><strong>Date Returned:</strong> {format_date_for_display(return_date)}</p>
                         <p style="margin: 5px 0;"><strong>Processed By:</strong> {returned_by}</p>
                     </div>
                     
@@ -1136,14 +1439,14 @@ def return_book():
     # Get titles for first student if any
     books = []
     if students:
-        cur.execute("SELECT DISTINCT b.title FROM BookIssue i JOIN Book b ON b.serial=i.serial "
+        cur.execute("SELECT DISTINCT b.title FROM BookIssue i JOIN Book b ON b.serial=CAST(i.serial AS INTEGER) "
                    "WHERE i.stdid=? ORDER BY b.title", (students[0]['userid'],))
         books = [row['title'] for row in cur.fetchall()]
     
     # Get available books for initial load
     available_books = []
     if books:
-        cur.execute("SELECT b.book_id FROM BookIssue i JOIN Book b ON b.serial=i.serial "
+        cur.execute("SELECT b.book_id FROM BookIssue i JOIN Book b ON b.serial=CAST(i.serial AS INTEGER) "
                    "WHERE i.stdid=? AND b.title=? ORDER BY b.book_id", 
                    (students[0]['userid'], books[0]))
         available_books = [row['book_id'] for row in cur.fetchall()]
@@ -1162,7 +1465,7 @@ def get_student_books():
     if not (student_id and title):
         return jsonify([])
     
-    cur.execute("SELECT b.book_id FROM BookIssue i JOIN Book b ON b.serial=i.serial "
+    cur.execute("SELECT b.book_id FROM BookIssue i JOIN Book b ON b.serial=CAST(i.serial AS INTEGER) "
                "WHERE i.stdid=? AND b.title=? ORDER BY b.book_id", (student_id, title))
     books = [row['book_id'] for row in cur.fetchall()]
     return jsonify(books)
@@ -1175,7 +1478,7 @@ def view_returns():
     cur.execute("""
         SELECT l.name AS student,
                d.title,
-               GROUP_CONCAT(d.book_id, ', ') AS ids,
+               STRING_AGG(d.book_id, ', ') AS ids,
                MIN(d.issue) AS issue,
                MAX(d.returned) AS returned,
                MAX(d.returned_by) AS returned_by
@@ -1208,7 +1511,7 @@ def view_returns():
 # Staff members list
 STAFF_MEMBERS = ['Afsa', 'Alex', 'Angella', 'Arun', 'Claudine', 'Emmy', 'Gaidi', 'George', 
                  'Guylain', 'Innocent I', 'Innocent M', 'Jeanette', 'Josue', 'Kelly', 'Linda', 
-                 'Marie Josee', 'Nepo', 'Obed', 'Sindi', 'Wendy']
+                 'Marie Josee', 'Nepo', 'Obed', 'Sindi', 'Wendy', 'Jacky']
 
 @app.route('/api/get_titles')
 @login_required
@@ -1219,7 +1522,7 @@ def get_titles():
     if not student_id:
         return jsonify([])
     
-    cur.execute("SELECT DISTINCT b.title FROM BookIssue i JOIN Book b ON b.serial=i.serial "
+    cur.execute("SELECT DISTINCT b.title FROM BookIssue i JOIN Book b ON b.serial=CAST(i.serial AS INTEGER) "
                "WHERE i.stdid=? ORDER BY b.title", (student_id,))
     titles = [row['title'] for row in cur.fetchall()]
     return jsonify(titles)
@@ -1288,6 +1591,7 @@ def test_email():
 try:
     with app.app_context():
         get_db()
+        # Populate initial students if database is empty
         populate_initial_students()
         start_email_worker()
         start_reminder_system()

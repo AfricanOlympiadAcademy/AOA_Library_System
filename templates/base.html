@@ -22,6 +22,14 @@
     <style>
         /* Small helper to ensure bootstrap components blend with existing palette */
         .navbar-brand { font-weight: 700; }
+        
+        /* Make navbar sticky so it stays visible when scrolling */
+        .navbar {
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
     </style>
 </head>
 <body>
