@@ -15,7 +15,14 @@ services:
         value: "tech@africanolympiadfoundation.org"
       - key: LIBRARY_NAME
         value: "AOA Library"
-      # IMPORTANT: Add RESEND_API_KEY in Render Dashboard Environment Variables
-      # - key: RESEND_API_KEY
-      #   value: "your-resend-api-key"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: AOA_Library  
+          property: connectionString
+
+databases:
+  - name: AOA_Library  
+    databaseName: aoa_library_ekbm
+    user: aoa_library_ekbm_user
+    plan: free
 
