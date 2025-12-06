@@ -14,6 +14,10 @@ import pytz
 import queue
 from functools import wraps
 
+# impoert file classes
+from Library.system_configuration import SystemLaunchConfiguration
+
+
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-change-this-in-production'  # Change this in production!
 
@@ -1295,6 +1299,8 @@ try:
 except Exception as e:
     print(f"Warning: Could not initialize app components: {e}")
 
+port_value = 5000 if SystemLaunchConfiguration.is_port_free(5000) else 5001
+
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=port_value)
 
