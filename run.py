@@ -15,7 +15,7 @@ import queue
 from functools import wraps
 
 # impoert file classes
-from Library.system_configuration import SystemLaunchConfiguration
+from app.system_configuration import SystemLaunchConfiguration
 
 
 app = Flask(__name__)
