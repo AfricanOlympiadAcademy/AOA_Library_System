@@ -14,8 +14,14 @@ from .services.reminder_service import start_reminder_system
 
 
 def create_app():
-    app = Flask(__name__)
-    app.secret_key = "CHANGE_ME"
+    # REMEMBER TO USE THE SECRET KEY FOR THE MAILING SERVICES, EDDY
+    app = Flask(
+        __name__,
+        template_folder='templates',
+        static_folder='static'
+    )
+
+    app.secret_key='CHANGE_ME'
 
     # Database teardown
     app.teardown_appcontext(close_db)
