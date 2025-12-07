@@ -10,11 +10,6 @@ _db_initialized = False
 
 
 def _resolve_db_path():
-    """
-    Decide where library.db lives.
-    NOTE: Now it will live next to this file (app/library.db).
-    Move your existing library.db there or adjust this path if needed.
-    """
     global DB_PATH
     if getattr(sys, 'frozen', False):
         base_dir = os.path.dirname(sys.executable)
@@ -24,7 +19,6 @@ def _resolve_db_path():
 
 
 def get_db():
-    """Get database connection (per-request)"""
     global DB_PATH, _db_initialized
 
     if 'db' not in g:
@@ -96,19 +90,16 @@ def get_db():
 
 
 def get_cursor():
-    """Shortcut to get a cursor"""
     return get_db().cursor()
 
 
 def close_db(error=None):
-    """Close db at end of request"""
     db = g.pop('db', None)
     if db is not None:
         db.close()
 
 
 def populate_initial_students():
-    """Populate initial student data if not already present"""
     db = get_db()
     cur = get_cursor()
     initial_students = [
@@ -157,5 +148,4 @@ def populate_initial_students():
 
 
 def init_app(app):
-    """Register db teardown with the app"""
     app.teardown_appcontext(close_db)
