@@ -28,7 +28,7 @@
 
     <nav class="navbar navbar-expand-lg navbar-dark" style="background-color: #265530 !important;">
         <div class="container">
-            <a class="navbar-brand" href="{{ url_for('dashboard') }}">AOA Library</a>
+            <a class="navbar-brand" href="{{ url_for('auth.dashboard') }}">AOA Library</a>
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
                 <span class="navbar-toggler-icon"></span>
             </button>
@@ -36,16 +36,16 @@
             <div class="collapse navbar-collapse" id="mainNav">
                 <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path.startswith(url_for('dashboard')) %}active{% endif %}" href="{{ url_for('dashboard') }}">Dashboard</a>
+                        <a class="nav-link {% if request.path.startswith(url_for('auth.dashboard')) %}active{% endif %}" href="{{ url_for('auth.dashboard') }}">Dashboard</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path.startswith(url_for('view_books')) %}active{% endif %}" href="{{ url_for('view_books') }}">Books</a>
+                        <a class="nav-link {% if request.path.startswith(url_for('books.view_books')) %}active{% endif %}" href="{{ url_for('books.view_books') }}">Books</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.path.startswith(url_for('view_students')) %}active{% endif %}" href="{{ url_for('view_students') }}">Students</a>
+                        <a class="nav-link {% if request.path.startswith(url_for('student_bp.view_students')) %}active{% endif %}" href="{{ url_for('student_bp.view_students') }}">Students</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link logout-link" href="{{ url_for('logout') }}">Logout</a>
+                        <a class="nav-link logout-link" href="{{ url_for('auth.logout') }}">Logout</a>
                     </li>
                 </ul>
             </div>

@@ -80,7 +80,7 @@ def view_books():
     return render_template('view_books.html', books=books)
 
 
-@app.route('/books/edit/<book_id>', methods=['POST'])
+@book_bp.route('/books/edit/<book_id>', methods=['POST'])
 @login_required
 def edit_book_id(book_id):
     get_db()
@@ -152,7 +152,7 @@ def edit_book_id(book_id):
     return redirect(url_for('books.view_books'))
 
 
-@app.route('/books/delete/<book_id>', methods=['POST'])
+@book_bp.route('/books/delete/<book_id>', methods=['POST'])
 @login_required
 def delete_book(book_id):
     get_db()
@@ -176,7 +176,7 @@ def delete_book(book_id):
     return redirect(url_for('books.view_books'))
 
 
-@app.route('/books/titles')
+@book_bp.route('/books/titles')
 @login_required
 def view_titles():
     get_db()
@@ -195,7 +195,7 @@ def view_titles():
     return render_template('view_titles.html', titles=titles)
 
 
-@app.route('/books/titles/delete', methods=['POST'])
+@book_bp.route('/books/titles/delete', methods=['POST'])
 @login_required
 def delete_title():
     get_db()
@@ -218,7 +218,7 @@ def delete_title():
     return redirect(url_for('view_titles'))
 
 
-@app.route('/books/deleted')
+@book_bp.route('/books/deleted')
 @login_required
 def view_deleted_books():
     get_db()
@@ -228,7 +228,7 @@ def view_deleted_books():
     return render_template('view_deleted_books.html', books=books)
 
 
-@app.route('/api/get_available_books')
+@book_bp.route('/api/get_available_books')
 @login_required
 def get_available_books():
     get_db()

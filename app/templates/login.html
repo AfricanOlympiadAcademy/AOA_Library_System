@@ -49,7 +49,7 @@
                 {% endif %}
             {% endwith %}
 
-            <form method="POST" action="{{ url_for('login') }}" class="login-form">
+            <form method="POST" action="{{ url_for('auth.login') }}" class="login-form">
                 <div class="login-field">
                     <label for="admin_id" class="login-label">Admin ID</label>
                     <input type="text" id="admin_id" name="admin_id" class="login-input" required autofocus>
