@@ -75,3 +75,12 @@ def delete_student(userid):
 
     flash("Student deleted", "success")
     return redirect(url_for("student_bp.view_students"))
+
+@student_bp.route('/students/deleted')
+@login_required
+def view_deleted_students():
+    get_db()
+    cur = get_cursor()
+    cur.execute("SELECT name, userid, deleted FROM DeletedLogin ORDER BY deleted DESC")
+    students = [dict(row) for row in cur.fetchall()]
+    return render_template('view_deleted_students.html', students=students)

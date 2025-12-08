@@ -205,17 +205,17 @@ def delete_title():
     
     if password != 'AOA@2027':
         flash('Wrong password', 'error')
-        return redirect(url_for('view_titles'))
+        return redirect(url_for('books.view_titles'))
     
     cur.execute("SELECT 1 FROM BookIssue i JOIN Book b ON b.book_id=i.book_id WHERE b.title=? LIMIT 1", (title,))
     if cur.fetchone():
         flash('Cannot delete: at least one copy is currently assigned', 'error')
-        return redirect(url_for('view_titles'))
+        return redirect(url_for('books.view_titles'))
     
     cur.execute("DELETE FROM Book WHERE title=?", (title,))
     get_db().commit()
     flash(f"Deleted all copies of '{title}'", 'success')
-    return redirect(url_for('view_titles'))
+    return redirect(url_for('books.view_titles'))
 
 
 @book_bp.route('/books/deleted')

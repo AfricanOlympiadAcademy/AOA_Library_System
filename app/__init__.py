@@ -21,7 +21,7 @@ def create_app():
         static_folder='static'
     )
 
-    app.secret_key='CHANGE_ME'
+    app.secret_key = 'your-secret-key-change-this-in-production'
 
     # Database teardown
     app.teardown_appcontext(close_db)
